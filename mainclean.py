@@ -15,15 +15,9 @@ import numpy as np
 
 # from utils.dataset import DataSetSeg
 from utils.TFRDataset import tfr_data_loader
-from models.hgrucleanSEG import hConvGRU, hConvGRUallSUP, hConvGRUtrunc
-from models.convlstm import ConvLSTM
+from models.hgrucleanSEG import hConvGRU
 from models.FFnet import FFConvNet
-from models.ffhgru import FFhGRU, FFhGRUwithGabor, FFhGRUwithoutGaussian, FFhGRUdown
-from models.ffhgru3d import FFhGRU3D
-from models.ffstlstm import FFSTLSTM
-from models.fflstm import FFLSTM
-from models.lrcn_style import LRCNStyle
-from models.lrcn_style_last_readout import LRCNStyleLast
+from models.ffhgru import FFhGRU  # , FFhGRUwithGabor, FFhGRUwithoutGaussian, FFhGRUdown
 
 from utils.transforms import GroupScale, Augmentation, Stack, ToTorchFormatTensor
 from utils.misc_functions import AverageMeter, FocalLoss, acc_scores, save_checkpoint
@@ -88,7 +82,6 @@ def validate(val_loader, model, criterion, device, logiters=None):
         for i, (imgs, target) in enumerate(val_loader):
             # Get into pytorch format
             imgs = torch.from_numpy(imgs.numpy())
-            import pdb;pdb.set_trace()
             imgs = imgs.permute(0,4,1,2,3)
             target = torch.from_numpy(np.vectorize(ord)(target.numpy()))
             imgs = imgs.to(device, dtype=torch.float)
@@ -98,12 +91,8 @@ def validate(val_loader, model, criterion, device, logiters=None):
             imgs = imgs.mean(1, keepdim=True)
             imgs = imgs / 255.  # Normalize to [0, 1]
 
-            # target = target.cuda()
-            # target = (target > 0.2).squeeze().long()
-            # imgs = imgs.cuda()
-            output, gt2, loss = model.forward(imgs, 0, 0, target, criterion)
-            
-            loss = loss.mean()
+            output, jv_penalty = model.forward(imgs)
+            loss = criterion(output, target.float().reshape(-1, 1))
             prec1, preci, rec, f1s = acc_scores(target, output.data)
             
             lossesv.update(loss.data.item(), 1)
@@ -149,56 +138,24 @@ if __name__ == '__main__':
     exp_logging = args.log
     jacobian_penalty = args.penalty
 
-    timesteps = 16
+    timesteps = 64
+    fb_kernel_size = 7
+    dimensions = 32
     if args.model == 'hgru':
-        print("Init model hgru ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
+        print("Init model hgru ", args.algo, 'penalty: ', args.penalty)  # , 'steps: ', timesteps)
         model = hConvGRU(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
                          grad_method=args.algo)
     elif args.model == 'ffhgru':
-        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = FFhGRU(batch_size=args.batch_size, timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)
-    elif args.model == 'ffhgru3d':
-        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = FFhGRU3D(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)                         
-    elif args.model == 'ffhgrudown':
-        print("Init model ffhgru with downsampled input ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = FFhGRUdown(batch_size=args.batch_size, timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)
-    elif args.model == 'ffhgrunogaussian':
-        print("Init model ffhgru without Gaussian ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = FFhGRUwithoutGaussian(batch_size=args.batch_size, timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)
-    elif args.model == 'ffhgrugabor':
-        print("Init model ffhgru with gabor init ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = FFhGRUwithGabor(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)                         
-    elif args.model == 'ffstlstm':
-        print("Init model ffstlstm ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = FFSTLSTM(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)
-    elif args.model == 'fflstm':
-        print("Init model fflstm ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = FFLSTM(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)
-    elif args.model == 'lrcn_style':
-        print("Init LRCN Style model  ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = LRCNStyle(batch_size=args.batch_size, timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)
-    elif args.model == 'lrcn_style_last_readout':
-        print("Init LRCN Style model  ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = LRCNStyleLast(batch_size=args.batch_size, timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)
-    elif args.model == 'clstm':
-        print("Init model clstm ", args.algo, 'penalty: ', args.penalty, 'steps: ', timesteps)
-        model = ConvLSTM(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)
-    elif args.model == 'ff':
-        print("Init model feedforw ", args.algo)
-        model = FFConvNet(filt_size=15)
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = FFhGRU(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            grad_method='bptt')
     else:
         print('Model not found')
+
     print(sum([p.numel() for p in model.parameters() if p.requires_grad]))
     if args.parallel is True:
         model = torch.nn.DataParallel(model).to(device)
@@ -252,8 +209,8 @@ if __name__ == '__main__':
             imgs = imgs / 255.  # Normalize to [0, 1]
 
             # Run training
-            output, jv_penalty, loss = model.forward(imgs, epoch, i, target, criterion)
-            loss = loss.mean()
+            output, jv_penalty = model.forward(imgs)
+            loss = criterion(output, target.float().reshape(-1, 1))
             losses.update(loss.data.item(), 1)
             jv_penalty = jv_penalty.mean()
             train_log_dict['jvpen'].append(jv_penalty.item())
