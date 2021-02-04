@@ -28,7 +28,7 @@ def read_tfrecord(example):
     return image, label #, height, width
     
 
-def tfr_data_loader(data_dir="", batch_size=32, drop_remainder=True):
+def tfr_data_loader(data_dir="", batch_size=32, drop_remainder=True, shuffle_buffer=1000):
     '''
     Function that takes path to tfrecord files (allows regular expressions), 
     and returns a tensorflow dataset that can be iterated upon, 
@@ -47,7 +47,8 @@ def tfr_data_loader(data_dir="", batch_size=32, drop_remainder=True):
     dataset = tf.data.TFRecordDataset(dataset, compression_type='GZIP') # , cycle_length=batch_size, num_parallel_calls=8)
     dataset = dataset.map(read_tfrecord, num_parallel_calls=AUTO)
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
-    # dataset = dataset.shuffle(10)
+    if shuffle_buffer > 0:
+        dataset = dataset.shuffle(shuffle_buffer, reshuffle_each_iteration=True)
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
     return dataset
 

@@ -19,5 +19,5 @@ CUDA_VISIBLE_DEVICES=1,2 python mainclean.py --print-freq 20 --lr 1e-04 --epochs
 
 # rm -r results/trial_run_pathtracker_ffhgru2d_gaussian_5_2_parallel_no_dropout_hgru_dim_4/
 rm -r results/test_drew
-CUDA_VISIBLE_DEVICES=5,6 python mainclean.py --print-freq 20 --lr 1e-04 --epochs 300 -b 32 --algo rbp --model ffhgru --name test_drew --log --parallel
+CUDA_VISIBLE_DEVICES=5,6 python mainclean.py --print-freq 20 --lr 1e-04 --epochs 300 -b 160 --algo rbp --model clock_dynamic --name test_drew --log --parallel
 

@@ -105,5 +105,6 @@ dependencies:
     - matplotlib==3.3.3
     - pyparsing==2.4.7
     - python-dateutil==2.8.1
+    - git+https://github.com/hassony2/torch_videovision
 prefix: /media/data/conda/dlinsley/envs/pytorch
 
