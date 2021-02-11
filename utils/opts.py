@@ -8,6 +8,8 @@ parser.add_argument('--name', type=str, default="hgru")
 parser.add_argument('--model', type=str, default="hgru")
 parser.add_argument('--algo', type=str, default="bptt")
 parser.add_argument('--penalty', default=False, action='store_true')
+parser.add_argument('--pretrained', default=False, action='store_true')
+parser.add_argument('--ckpt', type=str, default=None)
 
 # ========================= Learning Configs ==========================
 parser.add_argument('--epochs', default=30, type=int, metavar='N',

@@ -10,6 +10,7 @@ import time
 import torch
 from torchvision.transforms import Compose as transcompose
 import torch.nn.parallel
+from torch import nn
 import torch.optim
 import numpy as np
 
@@ -28,16 +29,18 @@ import matplotlib
 # import imageio
 from torch._six import inf
 from torchvideotransforms import video_transforms, volume_transforms
+from torchvision.models import video
 
 
 torch.backends.cudnn.benchmark = True
+TORCHVISION = ['r3d', 'mc2', 'r2plus1']
 
 global best_prec1
 best_prec1 = 0
 args = parser.parse_args()
 video_transform_list = [video_transforms.RandomHorizontalFlip(0.5), video_transforms.RandomVerticalFlip(0.5)]  # , volume_transforms.ClipToTensor(div_255=False)]
 transforms = video_transforms.Compose(video_transform_list)
-use_augmentations = True
+use_augmentations = False
 
 pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32/14_dist/tfrecords/'
 print("Loading training dataset")
@@ -103,7 +106,11 @@ def validate(val_loader, model, criterion, device, logiters=None):
             imgs = imgs.to(device, dtype=torch.float)
 
             # debug_plot(imgs)
-            output, jv_penalty = model.forward(imgs)
+            if args.model in TORCHVISION:
+                output = model.forward(imgs)
+                jv_penalty = torch.tensor([1]).float().cuda()
+            else:
+                output, jv_penalty = model.forward(imgs)
             loss = criterion(output, target.float().reshape(-1, 1))
             prec1, preci, rec, f1s = acc_scores(target, output.data)
             
@@ -152,7 +159,7 @@ if __name__ == '__main__':
 
     timesteps = 64
     fb_kernel_size = 5
-    dimensions = 32
+    dimensions = 48  # 32
     if args.model == 'hgru':
         print("Init model hgru ", args.algo, 'penalty: ', args.penalty)  # , 'steps: ', timesteps)
         model = models.hConvGRU(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
@@ -199,6 +206,18 @@ if __name__ == '__main__':
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
             grad_method='bptt')
+    elif args.model == 'r3d':
+        model = video.r3d_18(pretrained=args.pretrained)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 1)
+    elif args.model == 'mc3':
+        model = video.mc3_18(pretrained=args.pretrained)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 1)
+    elif args.model == 'r2plus1':
+        model = video.r2plus1d_18(pretrained=args.pretrained)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 1)
     else:
         raise NotImplementedError("Model not found.")
 
@@ -212,6 +231,7 @@ if __name__ == '__main__':
 
     criterion = torch.nn.BCEWithLogitsLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    print("Including parameters {}".format([k for k, v in model.named_parameters()]))
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
 
 
@@ -286,7 +306,11 @@ if __name__ == '__main__':
             imgs = imgs.to(device, dtype=torch.float)
 
             # Run training
-            output, jv_penalty = model.forward(imgs)
+            if args.model in TORCHVISION:
+                output = model.forward(imgs)
+                jv_penalty = torch.tensor([1]).float().cuda() 
+            else:
+                output, jv_penalty = model.forward(imgs)
             loss = criterion(output, target.float().reshape(-1, 1))
             losses.update(loss.data.item(), 1)
             jv_penalty = jv_penalty.mean()

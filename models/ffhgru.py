@@ -183,8 +183,8 @@ class hConvGRUCell(nn.Module):
         self.a_w_gate = nn.Conv2d(hidden_size, 1, kernel_size, padding=self.padding)
         self.a_u_gate = nn.Conv2d(hidden_size, 1, kernel_size, padding=self.padding)
 
-        # self.a_gate = transformer.ViT(image_size=32, channels=hidden_size, patch_size=4, num_classes=hidden_size, depth=1, heads=4, mlp_dim=hidden_size, dim=hidden_size, dim_head=2)
-        # self.a_gate = transformer.Transformer(dim=32*32*32, depth=1, heads=4, dim_head=32*32*32, mlp_dim=32*32*32, dropout=0.)
+        # self.a_w_gate = nn.Conv2d(hidden_size, hidden_size, 1, padding=1 // 2)
+        # self.a_u_gate = nn.Conv2d(hidden_size, hidden_size, 1, padding=1 // 2)
 
         self.i_w_gate = nn.Conv2d(hidden_size, hidden_size, 1)
         self.i_u_gate = nn.Conv2d(hidden_size, hidden_size, 1)
@@ -223,36 +223,45 @@ class hConvGRUCell(nn.Module):
         init.constant_(self.w, 0.5)
         init.constant_(self.mu, 1)
 
-        init.constant_(self.a_w_gate.bias, 1)
-        init.constant_(self.a_u_gate.bias, 1)
+        init.constant_(self.a_w_gate.bias, -1)  # In future try setting to -1 -- originally set to 1
+        init.constant_(self.a_u_gate.bias, -1)
         init.uniform_(self.i_w_gate.bias.data, 1, self.timesteps - 1)
         self.i_w_gate.bias.data.log()
         # self.i_w_gate.bias.data = -self.a_w_gate.bias.data
         self.e_w_gate.bias.data = -self.i_w_gate.bias.data
 
-    def forward(self, input_, inhibition, excitation,  activ=F.tanh):
+    def forward(self, input_, inhibition, excitation,  activ=F.softplus, testmode=False):  # Worked with tanh and softplus
         # Attention gate: filter input_ and excitation
-        att_gate = torch.sigmoid(self.a_w_gate(input_) + self.a_u_gate(excitation))  # Attention Spotlight
+        # att_gate = torch.sigmoid(self.a_w_gate(input_) + self.a_u_gate(excitation))  # Attention Spotlight
         # att_gate = torch.sigmoid(self.a_w_gate(input_) * self.a_u_gate(excitation))  # Attention Spotlight
+        att_gate = torch.sigmoid(self.a_w_gate(inhibition) + self.a_u_gate(excitation))  # Attention Spotlight -- MOST RECENT WORKING
+
+        # Gate E/I with attention immediately
+        gated_excitation = excitation
+        gated_inhibition = inhibition
+        gated_input = input_ * att_gate  # In activ range
 
         # Compute inhibition
-        inh_intx = self.bn[0](F.conv2d(excitation * att_gate, self.w_inh, padding=self.h_padding))
-        gated_inhibition = inhibition * att_gate
-        gated_input = input_ * att_gate
-        inhibition_hat = activ(gated_input - activ(inh_intx * (self.alpha * gated_inhibition + self.mu)))
-        # inhibition_hat = activ(input_ - activ(inh_intx * (self.alpha * excitation + self.mu)))
+        inh_intx = self.bn[0](F.conv2d(gated_excitation, self.w_inh, padding=self.h_padding))  # in activ range
+        # inhibition_hat = activ(gated_input - inh_intx * (self.alpha * gated_inhibition + self.mu))
+        # inhibition_hat = activ(gated_input - activ(inh_intx * (self.alpha * gated_inhibition + self.mu)))  # Older version
+        inhibition_hat = activ(input_ - activ(inh_intx * (self.alpha * gated_inhibition + self.mu)))
 
         # Integrate inhibition
-        inh_gate = torch.sigmoid(self.i_w_gate(input_) + self.i_u_gate(inhibition))
-        inhibition = (1 - inh_gate) * inhibition + inh_gate * inhibition_hat
+        inh_gate = torch.sigmoid(self.i_w_gate(gated_input) + self.i_u_gate(gated_inhibition))
+        inhibition = (1 - inh_gate) * inhibition + inh_gate * inhibition_hat  # In activ range
 
         # Pass to excitatory neurons
         exc_gate = torch.sigmoid(self.e_w_gate(inhibition) + self.e_u_gate(excitation))
-        exc_intx = self.bn[1](F.conv2d(inhibition, self.w_exc, padding=self.h_padding))
+        exc_intx = self.bn[1](F.conv2d(inhibition, self.w_exc, padding=self.h_padding))  # In activ range
         
         excitation_hat = activ(self.kappa * inhibition + self.gamma * exc_intx + self.w * inhibition * exc_intx)
         excitation = (1 - exc_gate) * excitation + exc_gate * excitation_hat
-        return inhibition, excitation
+        if testmode:
+            raise RuntimeError("Avoiding this route right now.")
+            return inhibition, excitation, att_gate
+        else:
+            return inhibition, excitation
 
 
 class hConvGRUCell3D(nn.Module):
@@ -432,77 +441,65 @@ class FFhGRU(nn.Module):
             timesteps=timesteps)
         # self.bn = nn.BatchNorm2d(self.hgru_size, eps=1e-03, track_running_stats=False)
         # self.readout = nn.Linear(timesteps * self.hgru_size, 1) # the first 2 is for batch size, the second digit is for the dimension
+        # self.readout_bn = nn.BatchNorm2d(self.hgru_size, eps=1e-03, track_running_stats=False)
         self.readout_conv = nn.Conv2d(dimensions, 1, 1)
+        # self.target_conv = nn.Conv2d(2, 1, 5, padding=5 // 2)
         self.target_conv = nn.Conv2d(2, 1, 5, padding=5 // 2)
         # self.readout_dense = nn.Linear(262144, 1)
         # self.readout_dense = nn.Linear(1048576, 1)
         # self.readout_dense = nn.Linear(65536, 1)
         self.readout_dense = nn.Linear(1, 1)
+        self.nl = F.softplus
 
     def forward(self, x, testmode=False):
         # First step: replicate x over the channel dim self.hgru_size times
         # x = x.repeat(1, self.hgru_size, 1, 1, 1)
-        x = self.preproc(x)
-        x = self.bn(x)
+        xbn = self.preproc(x)
+        # xbn = self.bn(prex)  # This might be hurting me...
+        x = self.nl(x)
 
         # Now run RNN
-        x_shape = x.shape
+        x_shape = xbn.shape
         excitation = torch.zeros((x_shape[0], x_shape[1], x_shape[3], x_shape[4]), requires_grad=False).to(x.device)
         inhibition = torch.zeros((x_shape[0], x_shape[1], x_shape[3], x_shape[4]), requires_grad=False).to(x.device)
 
         # Loop over frames
-        state_2nd_last = None
         states = []
+        gates = []
         for t in range(x_shape[2]):
-            inhibition, excitation = self.unit1(
-                input_=x[:, :, t],
+            out = self.unit1(
+                input_=xbn[:, :, t],
                 inhibition=inhibition,
-                excitation=excitation)
-            if t == x_shape[2] - 2 and "rbp" in self.grad_method:
-                state_2nd_last = excitation
-            elif t == x_shape[2] - 1:
-                last_state = excitation       
-            # frames.append(excitation.mean(dim=(2, 3)))
+                excitation=excitation,
+                activ=self.nl,
+                testmode=testmode)
+            if testmode:
+                inhibition, excitation, gate = out
+                gates.append(gate)  # This should learn to keep the winner
                 states.append(self.readout_conv(excitation))  # This should learn to keep the winner
+            else:
+                inhibition, excitation = out
+                states.append(self.readout_conv(excitation))
+                # if t == x_shape[2] - 1:
+                #     states.append(self.readout_conv(excitation))  # This should learn to keep the winner
 
         # Conv 1x1 output
-        states.append(x[:, 2, 0][:, None])  # Append the end goal
-        # states = states[-2:]  # Keep the final prediction + the end goal
-        output = torch.cat(states, 1)  # .reshape(x_shape[0], -1)
+        if testmode:
+            out_states = [states[-1]]
+            out_states.append(x[:, 2, 0][:, None])
+            output = torch.cat(out_states, 1)  # .reshape(x_shape[0], -1)
+        else:
+            # output = torch.cat([self.readout_conv(self.readout_bn(excitation)), x[:, 2, 0][:, None]], 1)
+            output = torch.cat([self.readout_conv(excitation), x[:, 2, 0][:, None]], 1)
+            # states.append(x[:, 2, 0][:, None])
+            # output = torch.cat(states, 1)
+        # Potentially combine target_conv + readout_bn into 1
         output = self.target_conv(output)  # 2 channels -> 1. Is the dot in the target?
         output = F.avg_pool2d(output, kernel_size=output.size()[2:])  # Spatial pool
         output = self.readout_dense(output.reshape(x_shape[0], -1))  # scale + intercept
-        # output = self.readout_dense(output.reshape(x_shape[0], -1).mean(-1))
-
-        # output = torch.cat(states,-1).reshape(x_shape[0], -1)
-        # output = self.readout_dense(torch.cat(states,-1).reshape(x_shape[0], -1))
-
         pen_type = 'l1'
         jv_penalty = torch.tensor([1]).float().cuda()
-        # mu = 0.9
-        # double_neg = False
-        # if self.training and self.jacobian_penalty:
-        #     if pen_type == 'l1':
-        #         norm_1_vect = torch.ones_like(last_state)
-        #         norm_1_vect.requires_grad = False
-        #         jv_prod = torch.autograd.grad(last_state, state_2nd_last, grad_outputs=[norm_1_vect], retain_graph=True,
-        #                                       create_graph=self.jacobian_penalty, allow_unused=True)[0]
-        #         jv_penalty = (jv_prod - mu).clamp(0) ** 2
-        #         if double_neg is True:
-        #             neg_norm_1_vect = -1 * norm_1_vect.clone()
-        #             jv_prod = torch.autograd.grad(last_state, state_2nd_last, grad_outputs=[neg_norm_1_vect], retain_graph=True,
-        #                                           create_graph=True, allow_unused=True)[0]
-        #             jv_penalty2 = (jv_prod - mu).clamp(0) ** 2
-        #             jv_penalty = jv_penalty + jv_penalty2
-        #     elif pen_type == 'idloss':
-        #         norm_1_vect = torch.rand_like(last_state).requires_grad_()
-        #         jv_prod = torch.autograd.grad(last_state, state_2nd_last, grad_outputs=[norm_1_vect], retain_graph=True,
-        #                                       create_graph=True, allow_unused=True)[0]
-        #         jv_penalty = (jv_prod - norm_1_vect) ** 2
-        #         jv_penalty = jv_penalty.mean()
-        #         if torch.isnan(jv_penalty).sum() > 0:
-        #             raise ValueError('Nan encountered in penalty')
-        if testmode: return output, states
+        if testmode: return output, torch.stack(states, 1), torch.stack(gates, 1)
         return output, jv_penalty
 
 
