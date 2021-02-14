@@ -41,8 +41,10 @@ args = parser.parse_args()
 video_transform_list = [video_transforms.RandomHorizontalFlip(0.5), video_transforms.RandomVerticalFlip(0.5)]  # , volume_transforms.ClipToTensor(div_255=False)]
 transforms = video_transforms.Compose(video_transform_list)
 use_augmentations = False
+disentangle_channels = False
 
-pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32/14_dist/tfrecords/'
+# pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32/14_dist/tfrecords/'
+pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/14_dist/tfrecords/'
 print("Loading training dataset")
 train_loader = tfr_data_loader(data_dir=pf_root+'train-*', batch_size=args.batch_size, drop_remainder=True)
 
@@ -92,15 +94,20 @@ def validate(val_loader, model, criterion, device, logiters=None):
             # imgs = imgs.mean(1, keepdim=True)
             imgs = imgs / 255.  # Normalize to [0, 1]
 
-            mask = imgs.sum(1).round()
-            # proc_imgs = torch.zeros_like(imgs)
-            # proc_imgs[:, 1] = (mask == 1).float()
-            # proc_imgs[:, 2] = (mask == 2).float()
-            # proc_imgs[:, 0] = (mask == 3).float()
-            proc_imgs = np.zeros_like(imgs)
-            proc_imgs[:, 1] = (mask == 1).astype(imgs.dtype)
-            proc_imgs[:, 2] = (mask == 2).astype(imgs.dtype)
-            proc_imgs[:, 0] = (mask == 3).astype(imgs.dtype)
+            if disentangle_channels:
+                mask = imgs.sum(1).round()
+                # proc_imgs = torch.zeros_like(imgs)
+                # proc_imgs[:, 1] = (mask == 1).float()
+                # proc_imgs[:, 2] = (mask == 2).float()
+                # proc_imgs[:, 0] = (mask == 3).float()
+                proc_imgs = np.zeros_like(imgs)
+                proc_imgs[:, 1] = (mask == 1).astype(imgs.dtype)
+                proc_imgs[:, 2] = (mask == 2).astype(imgs.dtype)
+                thing_layer = (mask == 3).astype(imgs.dtype)
+                # thing_layer = (thing_layer * 2) - 1
+                proc_imgs[:, 0] = thing_layer
+            else:
+                proc_imgs = imgs
 
             imgs = torch.from_numpy(proc_imgs)
             imgs = imgs.to(device, dtype=torch.float)
@@ -158,7 +165,7 @@ if __name__ == '__main__':
     jacobian_penalty = args.penalty
 
     timesteps = 64
-    fb_kernel_size = 5
+    fb_kernel_size = 7  # 5
     dimensions = 48  # 32
     if args.model == 'hgru':
         print("Init model hgru ", args.algo, 'penalty: ', args.penalty)  # , 'steps: ', timesteps)
@@ -288,15 +295,20 @@ if __name__ == '__main__':
             # imgs = imgs.mean(1, keepdim=True)
             imgs = imgs / 255.  # Normalize to [0, 1]
 
-            mask = imgs.sum(1).round()
-            # proc_imgs = torch.zeros_like(imgs)
-            # proc_imgs[:, 1] = (mask == 1).float()
-            # proc_imgs[:, 2] = (mask == 2).float()
-            # proc_imgs[:, 0] = (mask == 3).float()
-            proc_imgs = np.zeros_like(imgs)
-            proc_imgs[:, 1] = (mask == 1).astype(imgs.dtype)
-            proc_imgs[:, 2] = (mask == 2).astype(imgs.dtype)
-            proc_imgs[:, 0] = (mask == 3).astype(imgs.dtype)
+            if disentangle_channels:
+                mask = imgs.sum(1).round()
+                # proc_imgs = torch.zeros_like(imgs)
+                # proc_imgs[:, 1] = (mask == 1).float()
+                # proc_imgs[:, 2] = (mask == 2).float()
+                # proc_imgs[:, 0] = (mask == 3).float()
+                proc_imgs = np.zeros_like(imgs)
+                proc_imgs[:, 1] = (mask == 1).astype(imgs.dtype)
+                proc_imgs[:, 2] = (mask == 2).astype(imgs.dtype)
+                thing_layer = (mask == 3).astype(imgs.dtype)
+                # thing_layer = (thing_layer * 2) - 1
+                proc_imgs[:, 0] = thing_layer
+            else:
+                proc_imgs = imgs
             if use_augmentations:
                 imgs = transforms(proc_imgs)
                 imgs = np.stack(imgs, 0)
