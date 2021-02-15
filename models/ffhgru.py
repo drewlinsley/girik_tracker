@@ -258,7 +258,6 @@ class hConvGRUCell(nn.Module):
         excitation_hat = activ(self.kappa * inhibition + self.gamma * exc_intx + self.w * inhibition * exc_intx)  # Skip connection OR add OR add by self-sim
         excitation = (1 - exc_gate) * excitation + exc_gate * excitation_hat
         if testmode:
-            raise RuntimeError("Avoiding this route right now.")
             return inhibition, excitation, att_gate
         else:
             return inhibition, excitation

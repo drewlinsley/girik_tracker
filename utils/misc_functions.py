@@ -75,8 +75,8 @@ def save_checkpoint(state, is_best, results_folder):
         os.mkdir(save_folder)
     except:
         pass
-    filename = save_folder + 'model_fscore_{0:04d}_epoch_{1:02d}_checkpoint.pth.tar'.format(
-        int(state['best_prec1'] * 1e4), state['epoch'])
+    filename = save_folder + 'model_val_acc_{0:04d}_epoch_{1:02d}_checkpoint.pth.tar'.format(
+        int(state['best_acc']), state['epoch'])
     torch.save(state, filename)
 
 

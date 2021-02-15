@@ -166,7 +166,7 @@ if __name__ == '__main__':
 
     timesteps = 64
     fb_kernel_size = 7  # 5
-    dimensions = 48  # 32
+    dimensions = 32
     if args.model == 'hgru':
         print("Init model hgru ", args.algo, 'penalty: ', args.penalty)  # , 'steps: ', timesteps)
         model = models.hConvGRU(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
@@ -236,24 +236,26 @@ if __name__ == '__main__':
         model = model.to(device)
         print("Loading finished")
 
+    # noqa Save timesteps/kernel_size/dimensions/learning rate/epochs/exp_name/algo/penalty to a dict for reloading in the future
+    param_names_shapes = {k: v.shape for k, v in model.named_parameters()}
+    hp_dict = {
+        "penalty": jacobian_penalty,
+        "start_epoch": args.start_epoch,
+        "epochs": args.epochs,
+        "lr": args.lr,
+        "loaded_ckpt": args.ckpt,
+        "results_dir": results_folder,
+        "exp_name": args.name,
+        "algo": args.algo,
+        "dimensions": dimensions,
+        "fb_kernel_size": fb_kernel_size,
+        "param_names_shapes": param_names_shapes,
+        "timesteps": timesteps
+    }
+    np.savez(os.path.join(results_folder, "hp_dict"), **hp_dict)
     criterion = torch.nn.BCEWithLogitsLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     print("Including parameters {}".format([k for k, v in model.named_parameters()]))
-    # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
-
-
-    # model_path = "results/test_drew/saved_models/model_fscore_3325_epoch_186_checkpoint.pth.tar"
-    # checkpoint = torch.load(model_path)
-    # Check if "module" is the first part of the key
-    # check = checkpoint['state_dict'].keys()[0]
-    # sd = checkpoint['state_dict']
-    # if "module" in check and not args.parallel:
-    #     raise NotimplementedError
-    #     new_sd = {}
-    #     for k, v in sd.items():
-    #         new_sd[k.replace("module.", "")] = v
-    #     sd = new_sd
-    # model.load_state_dict(sd)
 
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 3, gamma=0.7)
     lr_init = args.lr
@@ -376,17 +378,21 @@ if __name__ == '__main__':
             model.eval()
             accv, precv, recv, f1sv, losv = validate(val_loader, model, criterion, device, logiters=3)
             model.train()
-            print('val f {} val loss {}'.format(f1sv, losv))
+            print_string = 'val f {} val loss {}'.format(f1sv, losv)
+            print(print_string)
             val_log_dict['loss'].append(losv)
             val_log_dict['balacc'].append(accv)
             val_log_dict['precision'].append(precv)
             val_log_dict['recall'].append(recv)
             val_log_dict['f1score'].append(f1sv)
+            with open(results_folder + args.name + '.txt', 'a+') as log_file:
+                log_file.write(print_string + '\n')
+
 
         # if (epoch + 1) % 1 == 0 or epoch == args.epochs - 1:
             # _, _, _, f1sv, _ = validate(val_loader, model, criterion, device)
             save_checkpoint({
                 'epoch': epoch,
                 'state_dict': model.state_dict(),
-                'best_prec1': f1sv}, True, results_folder)
+                'best_acc': accv}, True, results_folder)
 
