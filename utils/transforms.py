@@ -2,6 +2,7 @@ import torchvision
 from PIL import Image, ImageOps
 import numpy as np
 import torch
+import torch.nn as nn
 
 
 class GroupScale(object):
@@ -77,3 +78,20 @@ class ToTorchFormatTensor(object):
             img = torch.from_numpy(pic).permute(2,0,1).contiguous()
 
         return img.float().div(255) if self.div else img.float()
+
+
+class ConvertBHWCtoBCHW(nn.Module):
+    """Convert tensor from (B, H, W, C) to (B, C, H, W)
+    """
+
+    def forward(self, vid: torch.Tensor) -> torch.Tensor:
+        return vid.permute(0, 3, 1, 2)
+
+
+class ConvertBCHWtoCBHW(nn.Module):
+    """Convert tensor from (B, C, H, W) to (C, B, H, W)
+    """
+
+    def forward(self, vid: torch.Tensor) -> torch.Tensor:
+        return vid.permute(1, 0, 2, 3)
+

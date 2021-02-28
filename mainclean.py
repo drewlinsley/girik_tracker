@@ -25,15 +25,19 @@ from utils.transforms import GroupScale, Augmentation, Stack, ToTorchFormatTenso
 from utils.misc_functions import AverageMeter, FocalLoss, acc_scores, save_checkpoint
 from statistics import mean
 from utils.opts import parser
+from utils import presets
 import matplotlib
 # import imageio
 from torch._six import inf
 from torchvideotransforms import video_transforms, volume_transforms
 from torchvision.models import video
+from models import nostridetv as nostride_video
+from models.slowfast_utils import slowfast, slowfast_nl
 
 
 torch.backends.cudnn.benchmark = True
-TORCHVISION = ['r3d', 'mc2', 'r2plus1']
+TORCHVISION = ['r3d', 'mc3', 'r2plus1', 'nostride_r3d']
+SLOWFAST = ['slowfast', 'slowfast_nl']
 
 global best_prec1
 best_prec1 = 0
@@ -165,7 +169,7 @@ if __name__ == '__main__':
     jacobian_penalty = args.penalty
 
     timesteps = 64
-    fb_kernel_size = 7  # 5
+    fb_kernel_size = 7
     dimensions = 32
     if args.model == 'hgru':
         print("Init model hgru ", args.algo, 'penalty: ', args.penalty)  # , 'steps: ', timesteps)
@@ -179,9 +183,9 @@ if __name__ == '__main__':
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
             grad_method='bptt')
-    elif args.model == 'ffhgru3d':
+    elif args.model == 'ffhgru_v2':
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.FFhGRU3D(
+        model = ffhgru.FFhGRU_v2(
             dimensions=dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
@@ -213,8 +217,16 @@ if __name__ == '__main__':
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
             grad_method='bptt')
+    elif args.model == 'slowfast':
+        model = slowfast()
+    elif args.model == 'slowfast_nl':
+        model = slowfast_nl()
     elif args.model == 'r3d':
         model = video.r3d_18(pretrained=args.pretrained)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 1)
+    elif args.model == 'nostride_r3d':
+        model = nostride_video.r3d_18(pretrained=args.pretrained)
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, 1)
     elif args.model == 'mc3':
@@ -262,6 +274,8 @@ if __name__ == '__main__':
 
     val_log_dict = {'loss': [], 'balacc': [], 'precision': [], 'recall': [], 'f1score': []}
     train_log_dict = {'loss': [], 'balacc': [], 'precision': [], 'recall': [], 'f1score': [], 'jvpen': [], 'scaled_loss': []}
+    if args.pretrained:
+        pre_transform = presets.VideoClassificationPresetEval((32, 32), (32, 32))
 
     args.val_freq = 2000
 
@@ -318,11 +332,31 @@ if __name__ == '__main__':
                 imgs = proc_imgs
             imgs = torch.from_numpy(proc_imgs)            
             imgs = imgs.to(device, dtype=torch.float)
+            if args.pretrained:
+                # imgs = pre_transform(imgs)
+                mu = torch.tensor([0.43216, 0.394666, 0.37645], device=device)[None, :, None, None, None]
+                stddev = torch.tensor([0.22803, 0.22145, 0.216989], device=device)[None, :, None, None, None]
+                imgs = (imgs - mu) / stddev
 
             # Run training
             if args.model in TORCHVISION:
                 output = model.forward(imgs)
                 jv_penalty = torch.tensor([1]).float().cuda() 
+            elif args.model in SLOWFAST:
+                frames = imgs
+                fast_pathway = frames
+                # Perform temporal sampling from the fast pathway.
+                ALPHA = 4
+                slow_pathway = torch.index_select(
+                    frames,
+                    1,
+                    torch.linspace(
+                    0, frames.shape[1] - 1, frames.shape[1] // ALPHA
+                    ).long(),
+                )
+                frame_list = [slow_pathway, fast_pathway]
+                output = model.forward(frame_list)
+                jv_penalty = torch.tensor([1]).float().cuda()
             else:
                 output, jv_penalty = model.forward(imgs)
             loss = criterion(output, target.float().reshape(-1, 1))
@@ -359,6 +393,11 @@ if __name__ == '__main__':
                                        top1=top1, timeiteravg=mean(batch_time.history[-args.print_freq:]),
                                        timeprint=time_now - time_since_last, preci=precision, rec=recall,
                                        f1s=f1score, jpena=jv_penalty.item(), losscale=scale.item())
+                               # .format(epoch, idx, len_train_loader, batch_time=batch_time, data_time=data_time, loss=losses,
+                               #         lossprint=mean(losses.history[-args.print_freq:]), lr=optimizer.param_groups[0]['lr'],
+                               #         top1=top1, timeiteravg=mean(batch_time.history[-args.print_freq:]),
+                               #         timeprint=time_now - time_since_last, preci=precision, rec=recall,
+                               #         f1s=f1score, jpena=jv_penalty.item(), losscale=scale.item())
                 print(print_string)
                 time_since_last = time_now
                 with open(results_folder + args.name + '.txt', 'a+') as log_file:
