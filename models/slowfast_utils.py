@@ -12,3 +12,9 @@ def slowfast(cfg="models/cfgs/slowfast.yaml"):
     dcfg.merge_from_file(cfg)
     model = video_model_builder.SlowFast(dcfg)
     return model
+
+
+def fast(cfg="models/cfgs/slow.yaml"):
+    dcfg = get_cfg()
+    dcfg.merge_from_file(cfg)
+

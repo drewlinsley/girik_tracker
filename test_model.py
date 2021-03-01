@@ -15,6 +15,7 @@ import torch.optim
 import numpy as np
 
 # from utils.dataset import DataSetSeg
+from utils import engine
 from utils.TFRDataset import tfr_data_loader
 from models.hgrucleanSEG import hConvGRU
 from models.FFnet import FFConvNet
@@ -47,113 +48,21 @@ use_augmentations = False
 disentangle_channels = False
 plot_incremental = False
 debug_data = False
-
-# pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32/14_dist/tfrecords/'
-pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/14_dist/tfrecords/'
-pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_128_32_32_separate_channels/14_dist/tfrecords/'
-# pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/14_dist/tfrecords/'
-# pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/25_dist/tfrecords/'
-# pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_2/14_dist/tfrecords/'
-# pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/0_dist/tfrecords/'
-# pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/tfrecords/'
-# pf_root = '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_4/14_dist/tfrecords/'
-
-timesteps = 128
-print("Loading training dataset")
-train_loader = tfr_data_loader(data_dir=os.path.join(pf_root,'train-*'), batch_size=args.batch_size, drop_remainder=True, timesteps=timesteps)
-
-print("Loading validation dataset")
-val_loader = tfr_data_loader(data_dir=os.path.join(pf_root, 'test-*'), batch_size=args.batch_size, drop_remainder=True, timesteps=timesteps)
-
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-len_train_loader = 20000
-len_val_loader = 20000
 
-
-if __name__ == '__main__':
-    
-    results_folder = 'results/{0}/'.format(args.name)
-    # os.mkdir(results_folder)
+def evaluate_model(results_folder, args, prep_gifs=3, dist=14, speed=1, length=64):
+    """Evaluate a model and plot results."""
     os.makedirs(results_folder, exist_ok=True)
-    
-    exp_logging = args.log
-    jacobian_penalty = args.penalty
+    model = engine.model_selector(args=args, timesteps=timesteps, device=device)
 
-    fb_kernel_size = 7
-    dimensions = 32
-    if args.model == 'hgru':
-        print("Init model hgru ", args.algo, 'penalty: ', args.penalty)  # , 'steps: ', timesteps)
-        model = models.hConvGRU(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
-                         grad_method=args.algo)
-    elif args.model == 'ffhgru':
-        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.FFhGRU(
-            dimensions=dimensions,
-            timesteps=timesteps,
-            kernel_size=fb_kernel_size,
-            jacobian_penalty=False,
-            grad_method='bptt')
-    elif args.model == 'ffhgru_v2':
-        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.FFhGRU_v2(
-            dimensions=dimensions,
-            timesteps=timesteps,
-            kernel_size=fb_kernel_size,
-            jacobian_penalty=False,
-            grad_method='bptt')
-    elif args.model == 'ffhgru3d':
-        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.FFhGRU3D(
-            dimensions=dimensions,
-            timesteps=timesteps,
-            kernel_size=fb_kernel_size,
-            jacobian_penalty=False,
-            grad_method='bptt')
-    elif args.model == 'clock_dynamic':
-        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.ClockHGRU(
-            dimensions=dimensions,
-            timesteps=timesteps,
-            kernel_size=fb_kernel_size,
-            jacobian_penalty=False,
-            clock_type="dynamic",
-            grad_method='bptt')
-    elif args.model == 'clock_fixed':
-        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.ClockHGRU(
-            dimensions=dimensions,
-            timesteps=timesteps,
-            kernel_size=fb_kernel_size,
-            jacobian_penalty=False,
-            clock_type="fixed",
-            grad_method='bptt')
-    elif args.model == 'fc':
-        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.FC(
-            dimensions=dimensions,
-            timesteps=timesteps,
-            kernel_size=fb_kernel_size,
-            jacobian_penalty=False,
-            grad_method='bptt')
-    elif args.model == 'r3d':
-        model = video.r3d_18(pretrained=args.pretrained)
-        num_ftrs = model.fc.in_features
-        model.fc = nn.Linear(num_ftrs, 1)
-    elif args.model == 'nostride_r3d':
-        model = nostride_video.r3d_18(pretrained=args.pretrained)
-        num_ftrs = model.fc.in_features
-        model.fc = nn.Linear(num_ftrs, 1)
-    elif args.model == 'mc3':
-        model = video.mc3_18(pretrained=args.pretrained)
-        num_ftrs = model.fc.in_features
-        model.fc = nn.Linear(num_ftrs, 1)
-    elif args.model == 'r2plus1':
-        model = video.r2plus1d_18(pretrained=args.pretrained)
-        num_ftrs = model.fc.in_features
-        model.fc = nn.Linear(num_ftrs, 1)
-    else:
-        raise NotImplementedError("Model not found.")
+    pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=dist, speed=speed, length=length)
+    print("Loading training dataset")
+    train_loader = tfr_data_loader(data_dir=os.path.join(pf_root,'train-*'), batch_size=args.batch_size, drop_remainder=True, timesteps=timesteps)
+
+    print("Loading validation dataset")
+    val_loader = tfr_data_loader(data_dir=os.path.join(pf_root, 'test-*'), batch_size=args.batch_size, drop_remainder=True, timesteps=timesteps)
+
 
     print(sum([p.numel() for p in model.parameters() if p.requires_grad]))
     if args.parallel is True:
@@ -168,29 +77,14 @@ if __name__ == '__main__':
     criterion = torch.nn.BCEWithLogitsLoss().to(device)
     print("Including parameters {}".format([k for k, v in model.named_parameters()]))
 
-    val_log_dict = {'loss': [], 'balacc': [], 'precision': [], 'recall': [], 'f1score': []}
-    train_log_dict = {'loss': [], 'balacc': [], 'precision': [], 'recall': [], 'f1score': [], 'jvpen': [], 'scaled_loss': []}
-    if args.pretrained:
-        pre_transform = presets.VideoClassificationPresetEval((32, 32), (32, 32))
-
     assert args.ckpt is not None, "You must pass a checkpoint for testing."
-    # model_path = "results/test_drew/saved_models/model_fscore_3325_epoch_186_checkpoint.pth.tar"
-    model_path = args.ckpt
-    checkpoint = torch.load(model_path)
-    # Check if "module" is the first part of the key
-    # check = checkpoint['state_dict'].keys()[0]
-    sd = checkpoint['state_dict']
-    # if "module" in check and not args.parallel:
-    #     new_sd = {}
-    #     for k, v in sd.items():
-    #         new_sd[k.replace("module.", "")] = v
-    #     sd = new_sd
-    model.load_state_dict(sd)
+    model = engine.load_ckpt(model, args.ckpt)
+
     model.eval()
     accs = []
     losses = []
     for epoch in range(1):
-        
+
         time_since_last = time.time()
         model.train()
         end = time.perf_counter()
@@ -200,80 +94,30 @@ if __name__ == '__main__':
         else:
             loader = val_loader
         for idx, (imgs, target) in tqdm(enumerate(loader), total=int(len_val_loader / args.batch_size), desc="Processing test images"):
-            
+
             # Get into pytorch format
             with torch.no_grad():
-                imgs = imgs.numpy()
-                imgs = imgs.transpose(0,4,1,2,3)
-                target = torch.from_numpy(np.vectorize(ord)(target.numpy()))
-                target = target.to(device, dtype=torch.float)
-
-                # Convert imgs to 1-channel
-                imgs = imgs / 255.  # Normalize to [0, 1]
-
-                if disentangle_channels:
-                    mask = imgs.sum(1).round()
-                    proc_imgs = np.zeros_like(imgs)
-                    proc_imgs[:, 1] = (mask == 1).astype(imgs.dtype)
-                    proc_imgs[:, 2] = (mask == 2).astype(imgs.dtype)
-                    thing_layer = (mask == 3).astype(imgs.dtype)
-                    proc_imgs[:, 0] = thing_layer
-                else:
-                    proc_imgs = imgs
-                if use_augmentations:
-                    imgs = transforms(proc_imgs)
-                    imgs = np.stack(imgs, 0)
-                else:
-                    imgs = proc_imgs
-                imgs = torch.from_numpy(proc_imgs)            
-                imgs = imgs.to(device, dtype=torch.float)
-                if args.pretrained:
-                    mu = torch.tensor([0.43216, 0.394666, 0.37645], device=device)[None, :, None, None, None]
-                    stddev = torch.tensor([0.22803, 0.22145, 0.216989], device=device)[None, :, None, None, None]
-                    imgs = (imgs - mu) / stddev
-
-                # Run training
-                if args.model in TORCHVISION:
-                    output = model.forward(imgs)
-                else:
-                    output, states, gates = model.forward(imgs, testmode=True)
+                imgs, target = engine.prepare_data(imgs=imgs, target=target, args=args, device=device, disentangle_channels=disentangle_channels)
+                output, states, gates = engine.model_step(model, imgs, model_name=args.model, test=True)
                 loss = criterion(output, target.float().reshape(-1, 1))
                 accs.append((target.reshape(-1).float() == (output.reshape(-1) > 0).float()).float().mean().cpu())
                 losses.append(loss.item())
-                if plot_incremental:
-                    states = states.detach().cpu().numpy()
-                    gates = gates.detach().cpu().numpy()
-                    loss = criterion(output, target.float().reshape(-1, 1))
-                    cols = (timesteps / 8) + 1
-                    rng = np.arange(0, timesteps, 8)
-                    rng = np.concatenate((np.arange(0,timesteps,8), [timesteps-1]))
-                    img = imgs.cpu().numpy()
-                    from matplotlib import pyplot as plt
-                    sel = target.float().reshape(-1, 1) == (output > 0).float()
-                    sel = sel.cpu().numpy()
-                    sel = np.where(sel)[0]
-                    sel = sel[0]
-                    fig = plt.figure()
-                    for idx, i in enumerate(rng):
-                        print(idx)
-                        plt.subplot(3, cols, idx + 1)
-                        plt.axis("off")
-                        plt.imshow(img[sel, :, i].transpose(1, 2, 0))
-                        plt.title("Img")
-                        plt.subplot(3, cols, idx + 1 + cols)
-                        plt.axis("off")
-                        plt.imshow((gates[sel, i].squeeze() ** 2).mean(0))
-                        plt.title("Attn")
-                        plt.subplot(3, cols, idx + 1 + cols + (cols - 1))
-                        plt.title("Activity")
-                        plt.axis("off")
-                        plt.imshow(np.abs(states[sel, i].squeeze()))
-                    plt.suptitle("Batch acc: {}, Prediction: {}, Label: {}".format((target.reshape(-1).float() == (output.reshape(-1) > 0).float()).float().mean(), output[sel].cpu(), target[sel]))
-                    plt.show()
-                    plt.close(fig)
+                if plot_incremental and "hgru" in args.model:
+                    engine.plot_results(states, imgs, target, output=output, timesteps=timesteps, gates=gates)
 
     print("Mean accuracy: {}, mean loss: {}".format(np.mean(accs), np.mean(losses)))
+    np.savez(os.path.join(results_folder, "test_dist_{}_speed_{}_length_{}".format(dist, speed, length)), np.mean(accs), np.mean(losses))
 
+    # Prep_gifs needs to be an integer
+    engine.plot_results(states, imgs, target, output=output, timesteps=timesteps, gates=gates, prep_gifs=prep_gifs, results_folder=results_folder)
+
+
+if __name__ == '__main__':
+    results_folder = 'results/{0}/'.format(args.name)
+
+    evaluate_model(results_folder, args)
+
+    """
     states = states.detach().cpu().numpy()
     gates = gates.detach().cpu().numpy()
     rng = np.arange(0, timesteps, 8)
@@ -303,5 +147,5 @@ if __name__ == '__main__':
     plt.suptitle("Batch acc: {}, Prediction: {}, Label: {}".format((target.reshape(-1).float() == (output.reshape(-1) > 0).float()).float().mean(), output[sel].cpu(), target[sel]))
     plt.show()
     plt.close(fig)
-
+    """
 

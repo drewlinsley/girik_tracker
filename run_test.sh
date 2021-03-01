@@ -33,3 +33,7 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-3 --epo
 
 
 CUDA_VISIBLE_DEVICES=7 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 32 --model ffhgru --name test_drew --log --parallel --ckpt results/hgru_wider_32/saved_models/model_val_acc_0092_epoch_1271_checkpoint.pth.tar
+
+
+CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-3 --epochs 2000 -b 180 --model slowfast --name slowfast_1e-3 --log --parallel
+CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-3 --epochs 2000 -b 180 --model slowfast_nl --name slowfast_nl_1e-3 --log --parallel
