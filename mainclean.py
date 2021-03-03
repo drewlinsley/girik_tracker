@@ -27,9 +27,6 @@ import matplotlib
 # import imageio
 from torch._six import inf
 from torchvideotransforms import video_transforms, volume_transforms
-from torchvision.models import video
-from models import nostridetv as nostride_video
-from models.slowfast_utils import slowfast, slowfast_nl
 
 
 torch.backends.cudnn.benchmark = True

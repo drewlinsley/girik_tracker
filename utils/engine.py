@@ -1,6 +1,7 @@
 import os
 import torch
 import numpy as np
+from torch import nn
 from torch.nn import functional as F
 from matplotlib import pyplot as plt
 from models.hgrucleanSEG import hConvGRU
@@ -9,11 +10,23 @@ from models.ffhgru import FFhGRU  # , FFhGRUwithGabor, FFhGRUwithoutGaussian, FF
 from models import ffhgru
 from tqdm import tqdm
 import imageio
+from torchvision.models import video
+from models import nostridetv as nostride_video
+from models.slowfast_utils import slowfast, slowfast_nl
 
 
 TORCHVISION = ['r3d', 'mc3', 'r2plus1', 'nostride_r3d']
 SLOWFAST = ['slowfast', 'slowfast_nl']
-
+ALL_DATASETS = [ 
+    {"dist": 14, "speed": 1, "length": 64},
+    {"dist": 14, "speed": 1, "length": 128},
+    {"dist": 14, "speed": 1, "length": 32},
+    {"dist": 14, "speed": 2, "length": 64},
+    {"dist": 14, "speed": 4, "length": 64},
+    {"dist": 0, "speed": 1, "length": 64},
+    {"dist": 5, "speed": 1, "length": 64},
+    {"dist": 25, "speed": 1, "length": 64},
+]
 
 def model_step(model, imgs, model_name, test=False):
     """Pass imgs through the model."""
@@ -42,7 +55,10 @@ def model_step(model, imgs, model_name, test=False):
             return output, states, gates
         else:
             output, jv_penalty = model.forward(imgs)
-    return output, jv_penalty
+    if test:
+        return output, None, None
+    else:
+        return output, jv_penalty
 
 
 def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
@@ -252,4 +268,8 @@ def dataset_selector(dist, speed, length):
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/tfrecords/', 64, 20000, 20000
     elif dist == 14 and speed == 4 and length == 64:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_4/14_dist/tfrecords/', 64, 20000, 20000
+
+
+def get_datasets():
+    return ALL_DATASETS
 

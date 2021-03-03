@@ -34,13 +34,11 @@ from torchvideotransforms import video_transforms, volume_transforms
 from torchvision.models import video
 from models import nostridetv as nostride_video
 from tqdm import tqdm
+from types import SimpleNamespace
+from glob import glob
 
 
 torch.backends.cudnn.benchmark = True
-TORCHVISION = ['r3d', 'mc3', 'r2plus1', 'nostride_r3d']
-
-global best_prec1
-best_prec1 = 0
 args = parser.parse_args()
 video_transform_list = [video_transforms.RandomHorizontalFlip(0.5), video_transforms.RandomVerticalFlip(0.5)]  # , volume_transforms.ClipToTensor(div_255=False)]
 transforms = video_transforms.Compose(video_transform_list)
@@ -51,10 +49,36 @@ debug_data = False
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+def eval_best_model(directory, model, prep_gifs=3, batch_size=100):
+    """Given a directory, find the best performing checkpoint and evaluate it on all datasets."""
+    args = SimpleNamespace()
+    args.batch_size = batch_size
+    args.parallel = True
+    # perfs = np.load(os.path.join(directory, "val.npz"))["loss"]
+    # arg_perf = np.argmin(perfs)
+    perfs = np.load(os.path.join(directory, "val.npz"))["balacc"]
+    arg_perf = np.argmax(perfs)
+    weights = glob(os.path.join(directory, "saved_models", "*.tar"))
+    weights.sort(key=os.path.getmtime)
+    weights = np.asarray(weights)
+    ckpt = weights[arg_perf]
+    args.ckpt = ckpt
+    args.model = model
+    args.penalty = "Testing"
+    args.algo = "Testing"
+    if "imagenet" in directory:
+        args.pretrained = True
+    else:
+        args.pretrained = False
+    ds = engine.get_datasets()
+    for d in ds:
+        evaluate_model(results_folder, args, prep_gifs=prep_gifs, dist=d["dist"], speed=d["speed"], length=d["length"])
+
+
 def evaluate_model(results_folder, args, prep_gifs=3, dist=14, speed=1, length=64):
     """Evaluate a model and plot results."""
     os.makedirs(results_folder, exist_ok=True)
-    model = engine.model_selector(args=args, timesteps=timesteps, device=device)
+    model = engine.model_selector(args=args, timesteps=length, device=device)
 
     pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=dist, speed=speed, length=length)
     print("Loading training dataset")
@@ -106,46 +130,19 @@ def evaluate_model(results_folder, args, prep_gifs=3, dist=14, speed=1, length=6
                     engine.plot_results(states, imgs, target, output=output, timesteps=timesteps, gates=gates)
 
     print("Mean accuracy: {}, mean loss: {}".format(np.mean(accs), np.mean(losses)))
-    np.savez(os.path.join(results_folder, "test_dist_{}_speed_{}_length_{}".format(dist, speed, length)), np.mean(accs), np.mean(losses))
+    np.savez(os.path.join(results_folder, "test_perf_dist_{}_speed_{}_length_{}".format(dist, speed, length)), np.mean(accs), np.mean(losses))
 
     # Prep_gifs needs to be an integer
-    engine.plot_results(states, imgs, target, output=output, timesteps=timesteps, gates=gates, prep_gifs=prep_gifs, results_folder=results_folder)
+    if "hgru" in args.model:
+        data_results_folder = os.path.join(results_folder, "test_dist_{}_speed_{}_length_{}".format(dist, speed, length))
+        os.makedirs(data_results_folder, exist_ok=True)
+        engine.plot_results(states, imgs, target, output=output, timesteps=timesteps, gates=gates, prep_gifs=prep_gifs, results_folder=data_results_folder)
 
 
 if __name__ == '__main__':
     results_folder = 'results/{0}/'.format(args.name)
-
-    evaluate_model(results_folder, args)
-
-    """
-    states = states.detach().cpu().numpy()
-    gates = gates.detach().cpu().numpy()
-    rng = np.arange(0, timesteps, 8)
-    cols = (timesteps / 8) + 1
-    rng = np.concatenate((np.arange(0,timesteps,8), [timesteps-1]))
-    img = imgs.cpu().numpy()
-    from matplotlib import pyplot as plt
-    sel = target.float().reshape(-1, 1) == (output > 0).float()
-    sel = sel.cpu().numpy()
-    sel = np.where(sel)[0]
-    sel = sel[0]
-    fig = plt.figure()
-    for idx, i in enumerate(rng):
-        print(idx)  
-        plt.subplot(3, cols, idx + 1) 
-        plt.axis("off")
-        plt.imshow(img[sel, :, i].transpose(1, 2, 0))
-        plt.title("Img")
-        plt.subplot(3, cols, idx + 1 + cols)
-        plt.axis("off")
-        plt.imshow((gates[sel, i].squeeze() ** 2).mean(0)) 
-        plt.title("Attn")
-        plt.subplot(3, cols, idx + 1 + cols + (cols - 1))
-        plt.title("Activity")
-        plt.axis("off")
-        plt.imshow(np.abs(states[sel, i].squeeze()))
-    plt.suptitle("Batch acc: {}, Prediction: {}, Label: {}".format((target.reshape(-1).float() == (output.reshape(-1) > 0).float()).float().mean(), output[sel].cpu(), target[sel]))
-    plt.show()
-    plt.close(fig)
-    """
+    if args.ckpt is None:
+        eval_best_model(directory=results_folder, model=args.model)
+    else:
+        evaluate_model(results_folder=results_folder, args=args)
 
