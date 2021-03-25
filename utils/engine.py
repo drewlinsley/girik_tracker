@@ -8,11 +8,17 @@ from models.hgrucleanSEG import hConvGRU
 from models.FFnet import FFConvNet
 from models.ffhgru import FFhGRU  # , FFhGRUwithGabor, FFhGRUwithoutGaussian, FFhGRUdown
 from models import ffhgru
-from tqdm import tqdm
 import imageio
 from torchvision.models import video
 from models import nostridetv as nostride_video
+from models import nostridetv_cc as nostride_video_cc
 from models.slowfast_utils import slowfast, slowfast_nl
+from models import transformers
+from models import kys
+try:
+    from tqdm import tqdm
+except:
+    print("Failed to import tqdm.")
 
 
 TORCHVISION = ['r3d', 'mc3', 'r2plus1', 'nostride_r3d']
@@ -75,6 +81,54 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
             grad_method='bptt')
+    elif args.model == 'ffhgru_no_inh':
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRU(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            no_inh=True,
+            grad_method='bptt')
+    elif args.model == 'ffhgru_no_mult':
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRU(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            lesion_alpha=True,
+            lesion_gamma=True,
+            grad_method='bptt')
+    elif args.model == 'ffhgru_no_add':
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRU(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            lesion_mu=True,
+            lesion_kappa=True,
+            grad_method='bptt')
+    elif args.model == 'ffhgru_mult_add':
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRU(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            lesion_alpha=False,
+            lesion_gamma=True,
+            lesion_mu=True,
+            lesion_kappa=False,
+            grad_method='bptt')
+    elif args.model == 'gru':
+        model = kys.GRU(
+            dimensions=dimensions * 2,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            grad_method='bptt')
     elif args.model == 'ffhgru_v2':
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRU_v2(
@@ -109,6 +163,13 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
             grad_method='bptt')
+    elif args.model == 'performer':
+        model = transformers.PerformerModel(
+            dimensions=dimensions * 2,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            grad_method='bptt')
     elif args.model == 'slowfast':
         model = slowfast()
     elif args.model == 'slowfast_nl':
@@ -119,6 +180,10 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
         model.fc = nn.Linear(num_ftrs, 1)
     elif args.model == 'nostride_r3d':
         model = nostride_video.r3d_18(pretrained=args.pretrained)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 1)
+    elif args.model == 'nostride_r3d_cc':
+        model = nostride_video_cc.r3d_18(pretrained=args.pretrained)
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, 1)
     elif args.model == 'mc3':
@@ -162,6 +227,13 @@ def prepare_data(imgs, target, args, device, disentangle_channels, use_augmentat
         mu = torch.tensor([0.43216, 0.394666, 0.37645], device=device)[None, :, None, None, None]
         stddev = torch.tensor([0.22803, 0.22145, 0.216989], device=device)[None, :, None, None, None]
         imgs = (imgs - mu) / stddev
+
+    if "_cc" in args.model:
+        img_shape = imgs.shape
+        hh, ww = torch.meshgrid(torch.arange(1, img_shape[3] + 1, device=imgs.device, dtype=imgs.dtype), torch.arange(1, img_shape[4] + 1, device=imgs.device, dtype=imgs.dtype))
+        hh = hh[None, None, None].repeat(img_shape[0], 1, img_shape[2], 1, 1)
+        ww = ww[None, None, None].repeat(img_shape[0], 1, img_shape[2], 1, 1)
+        imgs = torch.cat([imgs, hh, ww], 1)
     return imgs, target
 
 

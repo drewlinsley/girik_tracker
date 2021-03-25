@@ -23,6 +23,10 @@ parser.add_argument('--lr_steps', default=[20, 40], type=float, nargs="+",
                     metavar='LRSteps', help='epochs to decay learning rate by 10')
 
 
+parser.add_argument('-d', '--dimensions', default=32, type=int)
+parser.add_argument('-k', '--fb_kernel_size', default=7, type=int)
+
+
 # ========================= Monitor Configs ==========================
 parser.add_argument('--print-freq', '-p', default=100, type=int,
                     metavar='N', help='print frequency (default: 10)')

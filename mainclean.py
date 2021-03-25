@@ -141,8 +141,8 @@ if __name__ == '__main__':
         "results_dir": results_folder,
         "exp_name": args.name,
         "algo": args.algo,
-        "dimensions": dimensions,
-        "fb_kernel_size": fb_kernel_size,
+        "dimensions": args.dimensions,
+        "fb_kernel_size": args.fb_kernel_size,
         "param_names_shapes": param_names_shapes,
         "timesteps": timesteps
     }

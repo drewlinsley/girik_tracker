@@ -23,12 +23,17 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-03 --ep
 CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-02 --epochs 300 -b 180 --model r2plus1 --name  r2plus_1e-2 --log --parallel
 
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python mainclean.py --print-freq 20 --lr 1e-03 --epochs 300 -b 180 --model nostride_r3d --name  nostride_r3d_1e-3 --log --parallel
+CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-03 --epochs 300 -b 180 --model nostride_r3d --name  nostride_r3d_dil_1e-3 --log --parallel
+
+
+CUDA_VISIBLE_DEVICES=0,1,2,3 python mainclean.py --print-freq 20 --lr 1e-03 --epochs 300 -b 180 --model nostride_r3d_cc --name  nostride_r3d_cc_dil_1e-3 --log --parallel
 
 
 
 CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-3 --epochs 1000 -b 280 --model ffhgru_v2 --name hgru_v2 --log --parallel
 
+
+CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-3 --epochs 1000 -b 280 --model ffhgru_no_inh --name ffhgru_no_inh --log --parallel
 
 
 
@@ -37,3 +42,12 @@ CUDA_VISIBLE_DEVICES=7 python test_model.py --print-freq 20 --lr 1e-03 --epochs 
 
 CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-3 --epochs 2000 -b 180 --model slowfast --name slowfast_1e-3 --log --parallel
 CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-3 --epochs 2000 -b 180 --model slowfast_nl --name slowfast_nl_1e-3 --log --parallel
+
+
+CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-3 --epochs 2000 -b 56 --model performer --name performer_1e-3 --log --parallel
+CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-4 --epochs 2000 -b 56 --model performer --name performer_1e-4 --log --parallel
+CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-5 --epochs 2000 -b 56 --model performer --name performer_1e-5 --log --parallel
+
+CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-4 --epochs 2000 -b 180 --model gru --name gru_1e-4 --log --parallel
+CUDA_VISIBLE_DEVICES=4,5,6,7 python mainclean.py --print-freq 20 --lr 1e-5 --epochs 2000 -b 180 --model gru --name gru_1e-5 --log --parallel
+

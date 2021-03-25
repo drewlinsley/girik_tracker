@@ -168,7 +168,7 @@ class BasicStem(nn.Sequential):
     """
     def __init__(self):
         super(BasicStem, self).__init__(
-            nn.Conv3d(3, 64, kernel_size=(3, 7, 7), stride=(1, 1, 1), dilation=(1, 2, 2), padding=(1, 3, 3), bias=False),
+            nn.Conv3d(5, 64, kernel_size=(3, 7, 7), stride=(1, 1, 1), dilation=(1, 2, 2), padding=(1, 3 * 2, 3 * 2), bias=False),
             nn.BatchNorm3d(64),
             nn.ReLU(inplace=True))
 
@@ -193,7 +193,7 @@ class R2Plus1dStem(nn.Sequential):
 class VideoResNet(nn.Module):
 
     def __init__(self, block, conv_makers, layers,
-                 stem, num_classes=400, fac=4,
+                 stem, num_classes=400, fac=2,
                  zero_init_residual=False):
         """Generic resnet video generator.
 
@@ -206,7 +206,7 @@ class VideoResNet(nn.Module):
             zero_init_residual (bool, optional): Zero init bottleneck residual BN. Defaults to False.
         """
         super(VideoResNet, self).__init__()
-        self.inplanes = 64
+        self.inplanes = 64 // fac
 
         self.stem = stem()
 
@@ -227,6 +227,7 @@ class VideoResNet(nn.Module):
                     nn.init.constant_(m.bn3.weight, 0)
 
     def forward(self, x):
+        import pdb;pdb.set_trace()
         x = self.stem(x)
 
         x = self.layer1(x)
@@ -250,7 +251,7 @@ class VideoResNet(nn.Module):
                 # nn.Conv3d(self.inplanes, planes * block.expansion,
                 #           kernel_size=1, stride=ds_stride, bias=False),
                 nn.Conv3d(self.inplanes, planes * block.expansion,
-                          kernel_size=ds_stride, dilation=ds_stride, stride=1, bias=False),
+                          kernel_size=ds_stride, dilation=ds_stride, stride=1, padding=ds_stride, bias=False),
                 nn.BatchNorm3d(planes * block.expansion)
             )
         layers = []

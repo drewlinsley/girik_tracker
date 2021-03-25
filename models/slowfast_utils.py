@@ -1,5 +1,8 @@
-from slowfast.models import video_model_builder
-from slowfast.config.defaults import get_cfg
+try:
+    from slowfast.models import video_model_builder
+    from slowfast.config.defaults import get_cfg
+except:
+    print("Failed to import slowfast.")
 
 def slowfast_nl(cfg="models/cfgs/slowfast_nl.yaml"):
     dcfg = get_cfg()
