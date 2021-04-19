@@ -23,6 +23,7 @@ from statistics import mean
 from utils.opts import parser
 from utils import presets
 from utils import engine
+from utils.earlystopping import EarlyStopping
 import matplotlib
 # import imageio
 from torch._six import inf
@@ -38,15 +39,6 @@ video_transform_list = [video_transforms.RandomHorizontalFlip(0.5), video_transf
 transforms = video_transforms.Compose(video_transform_list)
 use_augmentations = False
 disentangle_channels = False
-
-pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=14, speed=1, length=64)
-
-print("Loading training dataset")
-train_loader = tfr_data_loader(data_dir=pf_root+'train-*', batch_size=args.batch_size, drop_remainder=True)
-
-print("Loading validation dataset")
-val_loader = tfr_data_loader(data_dir=pf_root+'test-*', batch_size=args.batch_size, drop_remainder=True)
-
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -114,10 +106,21 @@ def save_npz(epoch, log_dict, results_folder, savename='train'):
 
 if __name__ == '__main__':
     
-    results_folder = 'results/{0}/'.format(args.name)
-    # os.mkdir(results_folder)
+    assert args.dist is not None, "You must pass a PT distance."
+    assert args.speed is not None, "You must pass a PT speed."
+    assert args.length is not None, "You must pass a PT length."
+    stem = "{}_{}_{}".format(args.length, args.speed, args.dist)
+    pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=args.dist, speed=args.speed, length=args.length)  # 14, 1, 64
+
+    print("Loading training dataset")
+    train_loader = tfr_data_loader(data_dir=pf_root+'train-*', batch_size=args.batch_size, drop_remainder=True)
+
+    print("Loading validation dataset")
+    val_loader = tfr_data_loader(data_dir=pf_root+'test-*', batch_size=args.batch_size, drop_remainder=True)
+
+    results_folder = os.path.join('results', stem, '{0}'.format(args.name))
+    ES = EarlyStopping(patience=50, results_folder=results_folder)
     os.makedirs(results_folder, exist_ok=True)
-    
     exp_logging = args.log
     jacobian_penalty = args.penalty
 
@@ -240,8 +243,13 @@ if __name__ == '__main__':
             val_log_dict['f1score'].append(f1sv)
             with open(results_folder + args.name + '.txt', 'a+') as log_file:
                 log_file.write(print_string + '\n')
-            save_checkpoint({
-                'epoch': epoch,
-                'state_dict': model.state_dict(),
-                'best_acc': accv}, True, results_folder)
+            # save_checkpoint({
+            #     'epoch': epoch,
+            #     'state_dict': model.state_dict(),
+            #     'best_acc': accv}, True, results_folder)
+            ES(accv, model, epoch)
+        if ES.early_stop:
+            print("Early stopping triggered. Quitting.")
+            os._exit(1)
+
 

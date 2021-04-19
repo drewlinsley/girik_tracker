@@ -1,0 +1,27 @@
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r3d --name r3d_1e-2 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r3d --name r3d_1e-3 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r3d --name r3d_1e-4 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model mc3 --name mc3_1e-4 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model mc3 --name mc3_1e-3 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model mc3 --name mc3_1e-2 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r2plus1 --name r2plus_1e-4 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r2plus1 --name r2plus_1e-3 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r2plus1 --name r2plus_1e-2 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r3d --name imagenet_r3d_1e-2 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r3d --name imagenet_r3d_1e-3 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r2plus1 --name imagenet_r2plus_1e-2 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r3d --name imagenet_r3d_1e-4 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r2plus1 --name imagenet_r2plus1_1e-4 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model r2plus1 --name imagenet_r2plus1_1e-3 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model mc3 --name imagenet_mc3_1e-2 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model mc3 --name imagenet_mc3_1e-3 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model mc3 --name imagenet_mc3_1e-4 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model hgru_v2 --name hgru_v2 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model nostride_r3d --name nostride_r3d_1e-3_fac_2 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model nostride_r3d --name nostride_r3d_1e-3_fac_4 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model nostride_r3d --name nostride_r3d_1e-4_fac_4 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model nostride_r3d --name nostride_r3d_1e-5_fac_4 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model slowfast --name slowfast_1e-3 --parallel
+CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model slowfast --name slowfast_1e-5 --parallel
+# CUDA_VISIBLE_DEVICES=0 python test_model.py --print-freq 20 --lr 1e-03 --epochs 300 -b 100 --model ffhgru --name hgru_wider_32 --parallel
+

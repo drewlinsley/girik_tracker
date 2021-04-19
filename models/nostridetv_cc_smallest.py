@@ -169,7 +169,7 @@ class BasicStem(nn.Sequential):
     """
     def __init__(self):
         super(BasicStem, self).__init__(
-            nn.Conv3d(5, 32, kernel_size=(3, 7, 7), stride=(1, 1, 1), dilation=(1, 2, 2), padding=(1, 3 * 2, 3 * 2), bias=False),
+            nn.Conv3d(3, 32, kernel_size=(3, 7, 7), stride=(1, 1, 1), dilation=(1, 1, 1), padding=(3 // 2, 7 // 2, 7 // 2), bias=False),
             nn.BatchNorm3d(32),
             nn.ReLU(inplace=True))
 
@@ -194,7 +194,7 @@ class R2Plus1dStem(nn.Sequential):
 class VideoResNet(nn.Module):
 
     def __init__(self, block, conv_makers, layers,
-                 stem, num_classes=1, fac=2,
+                 stem, num_classes=1, fac=2, timesteps=None,
                  zero_init_residual=False):
         """Generic resnet video generator.
 
@@ -207,18 +207,24 @@ class VideoResNet(nn.Module):
             zero_init_residual (bool, optional): Zero init bottleneck residual BN. Defaults to False.
         """
         super(VideoResNet, self).__init__()
-        self.inplanes = 64 // fac
+        self.inplanes = 32
 
         self.stem = stem()
 
-        self.layer1 = self._make_layer(block, conv_makers[0], 64 // fac, layers[0], stride=2)
-        self.layer2 = self._make_layer(block, conv_makers[1], 128 // fac, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, conv_makers[2], 256 // fac // fac, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, conv_makers[3], 512 // fac // fac, layers[3], stride=2)
+        self.layer1 = self._make_layer(block, conv_makers[0], 32, layers[0], stride=1)
+        self.layer2 = self._make_layer(block, conv_makers[1], 32, layers[1], stride=1)
+        self.layer3 = self._make_layer(block, conv_makers[2], 32, layers[2], stride=1)
+        self.layer4 = self._make_layer(block, conv_makers[3], 32, layers[3], stride=1)
 
-        self.avgpool = nn.AdaptiveAvgPool3d((1, 1, 1))
-        # self.target_conv = nn.Conv2d(2, 1, 5, padding=5 // 2)
-        self.fc = nn.Linear(512 * block.expansion // fac // fac, num_classes)
+        if timesteps is None:
+            timesteps = 1
+        # self.avgpool = nn.AdaptiveAvgPool3d((timesteps, 1, 1))
+        self.avgpool = nn.AdaptiveAvgPool3d((1, 32, 32))
+        self.target_conv = nn.Conv2d(33, 1, 5, padding=5 // 2)
+        torch.nn.init.zeros_(self.target_conv.bias)
+        # self.fc = nn.Linear(32 * block.expansion * timesteps, num_classes)
+        # self.fc = nn.Linear(33 * block.expansion * 32 * 32, num_classes)
+        self.fc = nn.Linear(1024, num_classes)
 
         # init weights
         self._initialize_weights()
@@ -229,6 +235,8 @@ class VideoResNet(nn.Module):
                     nn.init.constant_(m.bn3.weight, 0)
 
     def forward(self, x):
+        target = x[:, 2, 0][:, None].clone() 
+
         x = self.stem(x)
 
         x = self.layer1(x)
@@ -236,8 +244,12 @@ class VideoResNet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        x = self.avgpool(x)
-        x = x.flatten(1)
+        # x = self.avgpool(x)
+        # x = x.flatten(1)
+        x = x[:, :, -1]
+        target_x = torch.cat([x, target], 1)
+        x = self.target_conv(target_x)
+        x = x.view([int(x.shape[0]), -1])
         # Flatten the layer to fc
         x = self.fc(x)
 

@@ -12,16 +12,22 @@ import imageio
 from torchvision.models import video
 from models import nostridetv as nostride_video
 from models import nostridetv_cc as nostride_video_cc
+from models import nostridetv_cc_smallest as nostride_video_cc_small
+from models import nostridetv_positions as nostride_video_pos
 from models.slowfast_utils import slowfast, slowfast_nl
 from models import transformers
 from models import kys
+try:
+    from models import resnet_TSM as rntsm
+except:
+    print("Failed to import spatial sampler.")
 try:
     from tqdm import tqdm
 except:
     print("Failed to import tqdm.")
 
 
-TORCHVISION = ['r3d', 'mc3', 'r2plus1', 'nostride_r3d']
+TORCHVISION = ['r3d', 'mc3', 'r2plus1', 'nostride_r3d', 'nostride_r3d_pos']
 SLOWFAST = ['slowfast', 'slowfast_nl']
 ALL_DATASETS = [ 
     {"dist": 14, "speed": 1, "length": 64},
@@ -165,7 +171,21 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             grad_method='bptt')
     elif args.model == 'performer':
         model = transformers.PerformerModel(
-            dimensions=dimensions * 2,
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            grad_method='bptt')
+    elif args.model == 'lambda':
+        model = transformers.LambdaModel(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            grad_method='bptt')
+    elif args.model == 'timesformer':
+        model = transformers.TransformerModel(
+            dimensions=dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
@@ -178,6 +198,8 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
         model = video.r3d_18(pretrained=args.pretrained)
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, 1)
+    elif args.model == 'rntsm':
+        model = rntsm.resnet50(pretrained=False, shift='TSM',num_segments = 8, flow_estimation=1, **kwargs)
     elif args.model == 'nostride_r3d':
         model = nostride_video.r3d_18(pretrained=args.pretrained)
         num_ftrs = model.fc.in_features
@@ -185,7 +207,13 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
     elif args.model == 'nostride_r3d_cc':
         model = nostride_video_cc.r3d_18(pretrained=args.pretrained)
         num_ftrs = model.fc.in_features
+    elif args.model == 'nostride_r3d_pos':
+        model = nostride_video_pos.r3d_18(pretrained=args.pretrained)
+        num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, 1)
+    elif args.model == 'nostride_video_cc_small':
+        model = nostride_video_cc_small.r3d_18(pretrained=args.pretrained, timesteps=timesteps)
+        num_ftrs = model.fc.in_features
     elif args.model == 'mc3':
         model = video.mc3_18(pretrained=args.pretrained)
         num_ftrs = model.fc.in_features
@@ -228,7 +256,7 @@ def prepare_data(imgs, target, args, device, disentangle_channels, use_augmentat
         stddev = torch.tensor([0.22803, 0.22145, 0.216989], device=device)[None, :, None, None, None]
         imgs = (imgs - mu) / stddev
 
-    if "_cc" in args.model:
+    if "_cc" in args.model and args.model != "nostride_video_cc_small":
         img_shape = imgs.shape
         hh, ww = torch.meshgrid(torch.arange(1, img_shape[3] + 1, device=imgs.device, dtype=imgs.dtype), torch.arange(1, img_shape[4] + 1, device=imgs.device, dtype=imgs.dtype))
         hh = hh[None, None, None].repeat(img_shape[0], 1, img_shape[2], 1, 1)

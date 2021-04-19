@@ -1,6 +1,6 @@
 import torch
-import numpy as np
 import torch.nn as nn
+import numpy as np
 
 try:
         from torch.hub import load_state_dict_from_url
@@ -92,7 +92,7 @@ class BasicBlock(nn.Module):
 
         super(BasicBlock, self).__init__()
         self.conv1 = nn.Sequential(
-            conv_builder(inplanes, planes, midplanes, 1),
+            conv_builder(inplanes, planes, midplanes, stride),
             nn.BatchNorm3d(planes),
             nn.ReLU(inplace=True)
         )
@@ -102,7 +102,7 @@ class BasicBlock(nn.Module):
         )
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
-        self.stride = 1  # stride
+        self.stride = stride
 
     def forward(self, x):
         residual = x
@@ -169,8 +169,8 @@ class BasicStem(nn.Sequential):
     """
     def __init__(self):
         super(BasicStem, self).__init__(
-            nn.Conv3d(5, 32, kernel_size=(3, 7, 7), stride=(1, 1, 1), dilation=(1, 2, 2), padding=(1, 3 * 2, 3 * 2), bias=False),
-            nn.BatchNorm3d(32),
+            nn.Conv3d(5, 64, kernel_size=(3, 7, 7), stride=(1, 1, 1), dilation=(1, 1, 1), padding=(1, 3, 3), bias=False),
+            nn.BatchNorm3d(64),
             nn.ReLU(inplace=True))
 
 
@@ -179,7 +179,7 @@ class R2Plus1dStem(nn.Sequential):
     """
     def __init__(self):
         super(R2Plus1dStem, self).__init__(
-            nn.Conv3d(3, 45, kernel_size=(1, 7, 7),
+            nn.Conv3d(5, 45, kernel_size=(1, 7, 7),
                       stride=(1, 2, 2), padding=(0, 3, 3),
                       bias=False),
             nn.BatchNorm3d(45),
@@ -194,7 +194,7 @@ class R2Plus1dStem(nn.Sequential):
 class VideoResNet(nn.Module):
 
     def __init__(self, block, conv_makers, layers,
-                 stem, num_classes=1, fac=2,
+                 stem, num_classes=400, fac=4,
                  zero_init_residual=False):
         """Generic resnet video generator.
 
@@ -207,18 +207,17 @@ class VideoResNet(nn.Module):
             zero_init_residual (bool, optional): Zero init bottleneck residual BN. Defaults to False.
         """
         super(VideoResNet, self).__init__()
-        self.inplanes = 64 // fac
+        self.inplanes = 64
 
         self.stem = stem()
 
-        self.layer1 = self._make_layer(block, conv_makers[0], 64 // fac, layers[0], stride=2)
-        self.layer2 = self._make_layer(block, conv_makers[1], 128 // fac, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, conv_makers[2], 256 // fac // fac, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, conv_makers[3], 512 // fac // fac, layers[3], stride=2)
+        self.layer1 = self._make_layer(block, conv_makers[0], 64 // fac, layers[0], stride=1)
+        self.layer2 = self._make_layer(block, conv_makers[1], 128 // fac, layers[1], stride=1)
+        self.layer3 = self._make_layer(block, conv_makers[2], 256 // fac, layers[2], stride=1)
+        self.layer4 = self._make_layer(block, conv_makers[3], 512 // fac, layers[3], stride=1)
 
         self.avgpool = nn.AdaptiveAvgPool3d((1, 1, 1))
-        # self.target_conv = nn.Conv2d(2, 1, 5, padding=5 // 2)
-        self.fc = nn.Linear(512 * block.expansion // fac // fac, num_classes)
+        self.fc = nn.Linear(512 * block.expansion // fac, num_classes)
 
         # init weights
         self._initialize_weights()
@@ -229,6 +228,13 @@ class VideoResNet(nn.Module):
                     nn.init.constant_(m.bn3.weight, 0)
 
     def forward(self, x):
+
+        # Add a position embedding to x
+        hws = np.meshgrid(range(x.shape[3]), range(x.shape[4]))
+        hws = torch.tensor(np.stack(hws, -1).transpose(2, 0, 1)[None, :, None].repeat(x.shape[2], 2).repeat(x.shape[0], 0), device=x.device)
+        hws = hws / hws.max()
+        x = torch.cat([x, hws], 1)
+
         x = self.stem(x)
 
         x = self.layer1(x)
@@ -237,11 +243,11 @@ class VideoResNet(nn.Module):
         x = self.layer4(x)
 
         x = self.avgpool(x)
-        x = x.flatten(1)
         # Flatten the layer to fc
+        x = x.flatten(1)
         x = self.fc(x)
 
-        return x, torch.Tensor([0.]).to(x.device)
+        return x
 
     def _make_layer(self, block, conv_builder, planes, blocks, stride=1):
         downsample = None
@@ -252,7 +258,7 @@ class VideoResNet(nn.Module):
                 # nn.Conv3d(self.inplanes, planes * block.expansion,
                 #           kernel_size=1, stride=ds_stride, bias=False),
                 nn.Conv3d(self.inplanes, planes * block.expansion,
-                          kernel_size=ds_stride, dilation=ds_stride, stride=1, padding=1, bias=False),  # padding=(np.asarray(ds_stride) * np.asarray(ds_stride)).tolist(), bias=False),
+                          kernel_size=ds_stride, dilation=ds_stride, stride=1, bias=False),
                 nn.BatchNorm3d(planes * block.expansion)
             )
         layers = []
