@@ -52,9 +52,6 @@ def tfr_data_loader(data_dir="", batch_size=32, drop_remainder=True, shuffle_buf
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
     return dataset
 
-
-
-
 # start=time.time()
 # for x in a:
 #     tt=torch.from_numpy(x[0].numpy())

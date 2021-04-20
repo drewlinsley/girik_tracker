@@ -77,6 +77,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
     """Select a model."""
     if args.model == 'hgru':
         print("Init model hgru ", args.algo, 'penalty: ', args.penalty)  # , 'steps: ', timesteps)
+        raise NotImplementedError("This is Giriks version.")
         model = models.hConvGRU(timesteps=timesteps, filt_size=15, num_iter=15, exp_name=args.name, jacobian_penalty=jacobian_penalty,
                          grad_method=args.algo)
     elif args.model == 'ffhgru':
@@ -363,9 +364,19 @@ def dataset_selector(dist, speed, length):
     elif dist == 14 and speed == 2 and length == 64:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_2/14_dist/tfrecords/', 64, 20000, 20000
     elif dist == 0 and speed == 1 and length == 64:
-        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/0_dist/tfrecords/', 64, 20000, 20000
+        lp = "/media/data/tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/0_dist/tfrecords/"
+        if os.path.exists(lp):
+            print("Loading data from local storage.")
+            return lp, 64, 20000, 20000
+        else:
+            return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/0_dist/tfrecords/', 64, 20000, 20000
     elif dist == 5 and speed == 1 and length == 64:
-        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/tfrecords/', 64, 20000, 20000
+        lp = "/media/data/tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/tfrecords/"
+        if os.path.exists(lp):
+            print("Loading data from local storage.")
+            return lp, 64, 20000, 20000
+        else:
+            return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/tfrecords/', 64, 20000, 20000
     elif dist == 14 and speed == 4 and length == 64:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_4/14_dist/tfrecords/', 64, 20000, 20000
 
