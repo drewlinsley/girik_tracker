@@ -88,9 +88,18 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
             grad_method='bptt')
+    elif args.model == 'ffhgru_no_attention':
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRULesion(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            use_attention=False,
+            grad_method='bptt')
     elif args.model == 'ffhgru_no_inh':
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.FFhGRU(
+        model = ffhgru.FFhGRULesion(
             dimensions=dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
@@ -99,7 +108,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             grad_method='bptt')
     elif args.model == 'ffhgru_no_mult':
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.FFhGRU(
+        model = ffhgru.FFhGRULesion(
             dimensions=dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
@@ -109,7 +118,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             grad_method='bptt')
     elif args.model == 'ffhgru_no_add':
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.FFhGRU(
+        model = ffhgru.FFhGRULesion(
             dimensions=dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
@@ -119,7 +128,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             grad_method='bptt')
     elif args.model == 'ffhgru_mult_add':
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
-        model = ffhgru.FFhGRU(
+        model = ffhgru.FFhGRULesion(
             dimensions=dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
@@ -139,7 +148,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
     elif args.model == 'ffhgru_v2':
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRU_v2(
-            dimensions=dimensions,
+            dimensions=48,  # dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
@@ -297,16 +306,18 @@ def plot_results(states, imgs, target, output, timesteps, gates=None, prep_gifs=
         plt.subplot(3, cols, idx + 1)
         plt.axis("off")
         plt.imshow(img[sel, :, i].transpose(1, 2, 0))
-        plt.title("Img")
+        plt.title("Image")
         plt.subplot(3, cols, idx + 1 + cols)
         plt.axis("off")
         plt.imshow((gates[sel, i].squeeze() ** 2).mean(0))
-        plt.title("Attn")
+        plt.title("Attention")
         plt.subplot(3, cols, idx + 1 + cols + (cols - 1))
-        plt.title("Activity")
+        plt.title("Recurrent activity")
         plt.axis("off")
         plt.imshow(np.abs(states[sel, i].squeeze()))
-    plt.suptitle("Batch acc: {}, Prediction: {}, Label: {}".format((target.reshape(-1).float() == (output.reshape(-1) > 0).float()).float().mean(), output[sel].cpu(), target[sel]))
+    # plt.suptitle("Batch acc: {:.2f}, Prediction: {}, Label: {}".format((target.reshape(-1).float() == (output.reshape(-1) > 0).float()).float().mean(), (output[sel].cpu() > 0).item(), (target[sel] == 1).item()))
+    plt.suptitle("Prediction: {}, Label: {}".format((target.reshape(-1).float() == (output.reshape(-1) > 0).float()).float().mean(), (output[sel].cpu() > 0).item(), (target[sel] == 1).item()))
+
     if results_folder is not None:
         plt.savefig(os.path.join(results_folder, "random_selection.pdf"))
     if show_fig:
@@ -357,8 +368,14 @@ def dataset_selector(dist, speed, length):
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/14_dist/tfrecords/', 64, 20000, 20000
     elif dist == 14 and speed == 1 and length == 128:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_128_32_32_separate_channels/14_dist/tfrecords/', 128, 20000, 20000
+
     elif dist == 14 and speed == 1 and length == 32:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/14_dist/tfrecords/', 32, 20000, 20000
+    elif dist == 5 and speed == 1 and length == 32:
+        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/5_dist/tfrecords/', 32, 20000, 20000
+    elif dist == 0 and speed == 1 and length == 32:
+        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/0_dist/tfrecords/', 32, 20000, 20000
+
     elif dist == 25 and speed == 1 and length == 64:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/25_dist/tfrecords/', 64, 20000, 20000
     elif dist == 14 and speed == 2 and length == 64:
@@ -380,6 +397,15 @@ def dataset_selector(dist, speed, length):
     elif dist == 14 and speed == 4 and length == 64:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_4/14_dist/tfrecords/', 64, 20000, 20000
 
+
+def tuning_dataset_selector():
+    """Right now, just return the path to Girik's circular dataset."""
+    return '/media/data_cifs/projects/prj_tracking/downsampled_circular/downsampled_circular_32_34_34/1_dist_separate_channel/tfrecords', 64, 18, 18  # path/length/size/size
+
+
+def human_dataset_selector():
+    """Right now, just return the path to Girik's circular dataset."""
+    return '/media/data_cifs/projects/prj_tracking/MTurk_videos/downsampled_constrained_red_blue_64_32_32/14_dist_again_for_human_correlation/tfrecords', 64, 72, 72
 
 def get_datasets():
     return ALL_DATASETS

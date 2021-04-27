@@ -49,7 +49,7 @@ debug_data = False
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def eval_best_model(directory, model, prep_gifs=3, batch_size=100):
+def eval_best_model(directory, model, prep_gifs=3, batch_size=18):
     """Given a directory, find the best performing checkpoint and evaluate it on all datasets."""
     # perfs = np.load(os.path.join(directory, "val.npz"))["loss"]
     # arg_perf = np.argmin(perfs)
@@ -77,18 +77,17 @@ def eval_best_model(directory, model, prep_gifs=3, batch_size=100):
         evaluate_model(results_folder, args, prep_gifs=prep_gifs, dist=d["dist"], speed=d["speed"], length=d["length"])
 
 
-def evaluate_model(results_folder, args, prep_gifs=3, dist=14, speed=1, length=64):
+def evaluate_model(results_folder, args, prep_gifs=3, dist=14, speed=1, length=64, height=34, width=34):
     """Evaluate a model and plot results."""
     os.makedirs(results_folder, exist_ok=True)
     model = engine.model_selector(args=args, timesteps=length, device=device)
 
-    pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=dist, speed=speed, length=length)
+    pf_root, timesteps, len_train_loader, len_val_loader = engine.tuning_dataset_selector()
+    # height, width = 32, 32
+    # pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=dist, speed=speed, length=length)
+
     print("Loading training dataset")
-    train_loader = tfr_data_loader(data_dir=os.path.join(pf_root,'train-*'), batch_size=args.batch_size, drop_remainder=True, timesteps=timesteps)
-
-    print("Loading validation dataset")
-    val_loader = tfr_data_loader(data_dir=os.path.join(pf_root, 'test-*'), batch_size=args.batch_size, drop_remainder=True, timesteps=timesteps)
-
+    train_loader = tfr_data_loader(data_dir=os.path.join(pf_root,'train-*'), batch_size=args.batch_size, drop_remainder=True, timesteps=timesteps, height=height, width=width, shuffle_buffer=0)
 
     print(sum([p.numel() for p in model.parameters() if p.requires_grad]))
     if args.parallel is True:
@@ -112,24 +111,27 @@ def evaluate_model(results_folder, args, prep_gifs=3, dist=14, speed=1, length=6
     for epoch in range(1):
 
         time_since_last = time.time()
-        model.train()
+        # model.train()
         end = time.perf_counter()
 
-        if debug_data:  # "skip" in pf_root:
-            loader = train_loader
-        else:
-            loader = val_loader
-        for idx, (imgs, target) in tqdm(enumerate(loader), total=int(len_val_loader / args.batch_size), desc="Processing test images"):
+        loader = train_loader
+        for idx, (imgs, target) in tqdm(enumerate(loader), total=int(len_train_loader / args.batch_size), desc="Processing test images"):
 
             # Get into pytorch format
-            with torch.no_grad():
-                imgs, target = engine.prepare_data(imgs=imgs, target=target, args=args, device=device, disentangle_channels=disentangle_channels)
-                output, states, gates = engine.model_step(model, imgs, model_name=args.model, test=True)
-                loss = criterion(output, target.float().reshape(-1, 1))
-                accs.append((target.reshape(-1).float() == (output.reshape(-1) > 0).float()).float().mean().cpu())
-                losses.append(loss.item())
-                if plot_incremental and "hgru" in args.model:
-                    engine.plot_results(states, imgs, target, output=output, timesteps=timesteps, gates=gates)
+            imgs, target = engine.prepare_data(imgs=imgs, target=target, args=args, device=device, disentangle_channels=disentangle_channels)
+            from matplotlib import pyplot as plt
+            for idx in range(32):
+                plt.subplot(4, 8, idx + 1)
+                plt.imshow(imgs[0, :, idx].permute(1, 2, 0).cpu())
+                plt.axis("off")
+            import pdb;pdb.set_trace()
+            output, states, gates = engine.model_step(model, imgs, model_name=args.model, test=True)
+            output.backward()
+            exc_wgrads = model.module.unit1.w_exc.grad.mean((2, 3)).detach().cpu().numpy()
+            inh_wgrads = model.module.unit1.w_inh.grad.mean((2, 3)).detach().cpu().numpy()
+            # Need some static for exc/inh. These grads tell you weights which are responsible for Tracking here.
+            # Or maybe get all these grads then use a linear model?
+            # Next, use the highest-grads to select memory gate fan-in dims. These fan-ins should point to fan-outs that are in nearby dims.
 
     print("Mean accuracy: {}, mean loss: {}".format(np.mean(accs), np.mean(losses)))
     np.savez(os.path.join(results_folder, "test_perf_dist_{}_speed_{}_length_{}".format(dist, speed, length)), np.mean(accs), np.mean(losses))

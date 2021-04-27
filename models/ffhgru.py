@@ -261,6 +261,8 @@ class hConvGRUCell(nn.Module):
         if self.use_attention:
             # att_gate = torch.sigmoid(self.a_w_gate(inhibition) + self.a_u_gate(excitation))  # Attention Spotlight -- MOST RECENT WORKING
             att_gate = torch.sigmoid(self.a_w_gate(input_) + self.a_u_gate(excitation))  # Attention Spotlight -- MOST RECENT WORKING
+        elif not self.use_attention and testmode:
+            att_gate = torch.zeros_like(input_)
 
         # Gate E/I with attention immediately
         if self.use_attention:
@@ -465,7 +467,7 @@ class FFhGRU(nn.Module):
         self.jacobian_penalty = jacobian_penalty
         self.grad_method = grad_method
         self.hgru_size = dimensions
-        # self.bn = nn.BatchNorm3d(self.hgru_size, eps=1e-03, track_running_stats=False)
+        self.bn = nn.BatchNorm3d(self.hgru_size, eps=1e-03, track_running_stats=False)  # THIS IS UNUSED, VESTIGIAL
         self.preproc = nn.Conv3d(3, dimensions, kernel_size=1, padding=1 // 2)
         # self.preproc = nn.Conv2d(3, dimensions, kernel_size=1, padding=1 // 2)
         # self.preproc = nn.Parameter(torch.empty((1, dimensions, 1, 1, 1)))
@@ -474,6 +476,114 @@ class FFhGRU(nn.Module):
             hidden_size=self.hgru_size,
             kernel_size=kernel_size,
             use_attention=True,
+            no_inh=no_inh,
+            lesion_alpha=lesion_alpha,
+            lesion_mu=lesion_mu,
+            lesion_gamma=lesion_gamma,
+            lesion_kappa=lesion_kappa,
+            timesteps=timesteps)
+        # self.bn = nn.BatchNorm2d(self.hgru_size, eps=1e-03, track_running_stats=False)
+        # self.readout = nn.Linear(timesteps * self.hgru_size, 1) # the first 2 is for batch size, the second digit is for the dimension
+        # self.readout_bn = nn.BatchNorm2d(self.hgru_size, eps=1e-03, track_running_stats=False)
+        self.readout_conv = nn.Conv2d(dimensions, 1, 1)
+        self.target_conv = nn.Conv2d(2, 1, 5, padding=5 // 2)
+        torch.nn.init.zeros_(self.target_conv.bias)
+        # self.target_conv_0 = nn.Conv2d(3, 16, 5, padding=0)  # padding=5 // 2)
+        # self.target_pool_0 = nn.MaxPool2d(2, 2, padding=0)
+        # self.target_conv_1 = nn.Conv2d(16, 16, 5, padding=0)  # padding=7 // 2)
+        # self.target_pool_1 = nn.MaxPool2d(2, 2, padding=0)
+        # self.target_conv_2 = nn.Conv2d(16, 1, 5, padding=0)  # padding=7 // 2)
+        self.readout_dense = nn.Linear(1, 1)
+        # torch.nn.init.zeros_(self.readout_dense.bias)
+        self.nl = F.softplus
+
+    def forward(self, x, testmode=False):
+        # First step: replicate x over the channel dim self.hgru_size times
+        xbn = self.preproc(x)
+        # xbn = self.bn(xbn)  # This might be hurting me...
+        xbn = self.nl(xbn)  # TEST TO SEE IF THE NL STABLIZES
+
+        # Now run RNN
+        x_shape = xbn.shape
+        excitation = torch.zeros((x_shape[0], x_shape[1], x_shape[3], x_shape[4]), requires_grad=False).to(x.device)
+        inhibition = torch.zeros((x_shape[0], x_shape[1], x_shape[3], x_shape[4]), requires_grad=False).to(x.device)
+        # excitation = xbn.clone()[:, :, 0]
+        # inhibition = xbn.clone()[:, :, 0]
+        # with torch.no_grad():
+        #     inhibition = xbn[:, :, 0].clone()
+
+        # Loop over frames
+        states = []
+        gates = []
+        for t in range(x_shape[2]):
+            out = self.unit1(
+                input_=xbn[:, :, t],
+                inhibition=inhibition,
+                excitation=excitation,
+                activ=self.nl,
+                testmode=testmode)
+            if testmode:
+                inhibition, excitation, gate = out
+                gates.append(gate)  # This should learn to keep the winner
+                states.append(self.readout_conv(excitation))  # This should learn to keep the winner
+            else:
+                inhibition, excitation = out
+                # states.append(self.readout_conv(excitation))
+                # if t == x_shape[2] - 1:
+                #     states.append(self.readout_conv(excitation))  # This should learn to keep the winner
+
+        # Conv 1x1 output
+        # if testmode:
+        #     out_states = [states[-1]]
+        #     out_states.append(x[:, 2, 0][:, None])
+        #     output = torch.cat(out_states, 1)  # .reshape(x_shape[0], -1)
+        # else:
+        # output = torch.cat([self.readout_conv(self.readout_bn(excitation)), x[:, 2, 0][:, None]], 1)
+
+        output = torch.cat([self.readout_conv(excitation), x[:, 2, 0][:, None]], 1)
+        # output = torch.cat(states, 1).mean(1, keepdim=True)  # Convert video -> spatial path
+        # output = torch.cat([output, x[:, 1:, 0]], 1)  # Paste the start and end goals
+
+        # Potentially combine target_conv + readout_bn into 1
+        output = self.target_conv(output)  # output.sum(1, keepdim=True))  # 2 channels -> 1. Is the dot in the target?
+        # output = self.target_conv(torch.cat([excitation, x[:, 2, 0][:, None]], 1))
+        # # Mini readout network for solving PF without any clutter. RF=32x32
+        # output = self.nl(self.target_conv_0(output))
+        # output = self.target_pool_0(output)
+        # output = self.nl(self.target_conv_1(output))
+        # output = self.target_pool_0(output)
+        # output = self.nl(self.target_conv_2(output))
+        # if sum([*output.size()[2:]]) > 2:
+        #     output = F.avg_pool2d(output, kernel_size=output.size()[2:])  # Spatial pool
+        output = F.avg_pool2d(output, kernel_size=output.size()[2:])
+        # output = self.readout_dense(output.reshape(x_shape[0], -1))  # scale + intercept
+        output = output.reshape(x_shape[0], -1)
+        output = self.readout_dense(output)
+        pen_type = 'l1'
+        jv_penalty = torch.tensor([1]).float().cuda()
+        if testmode: return output, torch.stack(states, 1), torch.stack(gates, 1)
+        return output, jv_penalty
+
+
+class FFhGRULesion(nn.Module):
+
+    def __init__(self, dimensions, timesteps=8, kernel_size=15, jacobian_penalty=False, grad_method='bptt', no_inh=False, lesion_alpha=False, lesion_mu=False, lesion_gamma=False, lesion_kappa=False, use_attention=True):
+        '''
+        '''
+        super(FFhGRULesion, self).__init__()
+        self.timesteps = timesteps
+        self.jacobian_penalty = jacobian_penalty
+        self.grad_method = grad_method
+        self.hgru_size = dimensions
+        # self.bn = nn.BatchNorm3d(self.hgru_size, eps=1e-03, track_running_stats=False)  # THIS IS UNUSED, VESTIGIAL
+        self.preproc = nn.Conv3d(3, dimensions, kernel_size=1, padding=1 // 2)
+        # self.preproc = nn.Conv2d(3, dimensions, kernel_size=1, padding=1 // 2)
+        # self.preproc = nn.Parameter(torch.empty((1, dimensions, 1, 1, 1)))
+        # init.orthogonal_(self.preproc)
+        self.unit1 = hConvGRUCell(
+            hidden_size=self.hgru_size,
+            kernel_size=kernel_size,
+            use_attention=use_attention,
             no_inh=no_inh,
             lesion_alpha=lesion_alpha,
             lesion_mu=lesion_mu,
@@ -573,7 +683,8 @@ class FFhGRU_v2(nn.Module):
         self.jacobian_penalty = jacobian_penalty
         self.grad_method = grad_method
         self.hgru_size = dimensions
-        # self.bn = nn.BatchNorm3d(self.hgru_size, eps=1e-03, track_running_stats=False)
+        self.bn = nn.BatchNorm3d(self.hgru_size, eps=1e-03, track_running_stats=False)
+
         self.preproc = nn.Conv3d(3, dimensions, kernel_size=1, padding=1 // 2)
         # self.preproc = nn.Conv2d(3, dimensions, kernel_size=1, padding=1 // 2)
         # self.preproc = nn.Parameter(torch.empty((1, dimensions, 1, 1, 1)))
@@ -600,7 +711,6 @@ class FFhGRU_v2(nn.Module):
     def forward(self, x, testmode=False):
         # First step: replicate x over the channel dim self.hgru_size times
         xbn = self.preproc(x)
-        # xbn = self.bn(prex)  # This might be hurting me...
         xbn = self.nl(xbn)  # TEST TO SEE IF THE NL STABLIZES
 
         # Now run RNN

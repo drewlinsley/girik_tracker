@@ -119,7 +119,7 @@ if __name__ == '__main__':
     val_loader = tfr_data_loader(data_dir=pf_root+'test-*', batch_size=args.batch_size, drop_remainder=True)
 
     results_folder = os.path.join('results', stem, '{0}'.format(args.name))
-    ES = EarlyStopping(patience=50, results_folder=results_folder)
+    ES = EarlyStopping(patience=100, results_folder=results_folder)
     os.makedirs(results_folder, exist_ok=True)
     exp_logging = args.log
     jacobian_penalty = args.penalty
