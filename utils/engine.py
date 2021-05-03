@@ -88,7 +88,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
             grad_method='bptt')
-    elif args.model == 'ffhgru_no_inh':
+    elif args.model == 'ffhgru_no_inh':  # Exc-only
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRU(
             dimensions=dimensions,
@@ -97,37 +97,58 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             jacobian_penalty=False,
             no_inh=True,
             grad_method='bptt')
-    elif args.model == 'ffhgru_no_mult':
+    elif args.model == 'ffhgru_no_mult':  # Reverse mely
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRU(
             dimensions=dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
-            lesion_alpha=True,
-            lesion_gamma=True,
+            lesion_alpha=True,  # No div inh
+            lesion_gamma=True,  # No add exc
             grad_method='bptt')
-    elif args.model == 'ffhgru_no_add':
+    elif args.model == 'ffhgru_no_add':  # Mely style
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRU(
             dimensions=dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
-            lesion_mu=True,
+            lesion_mu=True,  # No sub inh
+            lesion_kappa=True,  # No Mult exc
+            grad_method='bptt')
+    elif args.model == 'ffhgru_mult_add':  # Div/Mult only
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRU(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            lesion_alpha=False,  # Div inh
+            lesion_gamma=True,  # Mult add
+            lesion_mu=True,  # Sub inh
+            lesion_kappa=False,  # Mult exc
+            grad_method='bptt')
+    elif args.model == 'ffhgru_only_add':  # Sub/Add only
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRU(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            lesion_alpha=True,  # No div inh
+            lesion_gamma=False,  # No add exc
+            lesion_mu=False,
             lesion_kappa=True,
             grad_method='bptt')
-    elif args.model == 'ffhgru_mult_add':
+    elif args.model == 'ffhgru_tanh':  # No dales
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRU(
             dimensions=dimensions,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
-            lesion_alpha=False,
-            lesion_gamma=True,
-            lesion_mu=True,
-            lesion_kappa=False,
+            nl=F.tanh,
             grad_method='bptt')
     elif args.model == 'gru':
         model = kys.GRU(
@@ -200,7 +221,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, 1)
     elif args.model == 'rntsm':
-        model = rntsm.resnet50(pretrained=False, shift='TSM',num_segments = 8, flow_estimation=1, **kwargs)
+        model = rntsm.resnet50(pretrained=False, shift='TSM',num_segments = 8, flow_estimation=1)
     elif args.model == 'nostride_r3d':
         model = nostride_video.r3d_18(pretrained=args.pretrained)
         num_ftrs = model.fc.in_features
@@ -351,34 +372,68 @@ def plot_results(states, imgs, target, output, timesteps, gates=None, prep_gifs=
                     os.remove(filename)
 
 
-def dataset_selector(dist, speed, length):
+LOCAL = "/gpfs/data/tserre/data/tracking/tfrecords"
+
+def dataset_selector(dist, speed, length, optical_flow=False):
     """Organize the datasets here."""
+    stem = "tfrecords"
+    if optical_flow:
+        stem = "tfrecords_optic_flow"
     if dist == 14 and speed == 1 and length == 64:
-        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/14_dist/tfrecords/', 64, 20000, 20000
-    elif dist == 14 and speed == 1 and length == 128:
-        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_128_32_32_separate_channels/14_dist/tfrecords/', 128, 20000, 20000
+        lp = os.path.join(LOCAL, "downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/14_dist/tfrecords/")
+        if os.path.exists(lp):
+            print("Loading data from local storage.")
+            return lp, 64, 20000, 20000
+        else:
+            return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/tfrecords/', 64, 20000, 20000
+        return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/14_dist/tfrecords/', 64, 20000, 20000
+
     elif dist == 14 and speed == 1 and length == 32:
-        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/14_dist/tfrecords/', 32, 20000, 20000
+        lp = os.path.join(LOCAL, "downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/14_dist/tfrecords/")
+        if os.path.exists(lp):
+            print("Loading data from local storage.")
+            return lp, 64, 20000, 20000
+        else:
+            return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/14_dist/tfrecords/', 32, 20000, 20000
+    elif dist == 5 and speed == 1 and length == 32:
+        lp = os.path.join(LOCAL, "downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/5_dist/tfrecords/")
+        if os.path.exists(lp):
+            print("Loading data from local storage.")
+            return lp, 64, 20000, 20000
+        else:
+            return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/5_dist/tfrecords/', 32, 20000, 20000
+    elif dist == 0 and speed == 1 and length == 32:
+        lp = os.path.join(LOCAL, "downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/0_dist/tfrecords/")
+        if os.path.exists(lp):
+            print("Loading data from local storage.")
+            return lp, 64, 20000, 20000
+        else:
+            return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/0_dist/tfrecords/', 32, 20000, 20000
+
+    elif dist == 14 and speed == 1 and length == 128:
+        return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_128_32_32_separate_channels/14_dist/tfrecords/', 128, 20000, 20000
+    elif dist == 14 and speed == 1 and length == 32:
+        return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/14_dist/tfrecords/', 32, 20000, 20000
     elif dist == 25 and speed == 1 and length == 64:
-        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/25_dist/tfrecords/', 64, 20000, 20000
+        return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/25_dist/tfrecords/', 64, 20000, 20000
     elif dist == 14 and speed == 2 and length == 64:
-        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_2/14_dist/tfrecords/', 64, 20000, 20000
+        return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_2/14_dist/tfrecords/', 64, 20000, 20000
     elif dist == 0 and speed == 1 and length == 64:
-        lp = "/media/data/tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/0_dist/tfrecords/"
+        lp = os.path.join(LOCAL, "downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/0_dist/{}/".format(stem))
         if os.path.exists(lp):
             print("Loading data from local storage.")
             return lp, 64, 20000, 20000
         else:
-            return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/0_dist/tfrecords/', 64, 20000, 20000
+            return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/0_dist/tfrecords/', 64, 20000, 20000
     elif dist == 5 and speed == 1 and length == 64:
-        lp = "/media/data/tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/tfrecords/"
+        lp = os.path.join(LOCAL, "downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/{}/".format(stem))
         if os.path.exists(lp):
             print("Loading data from local storage.")
             return lp, 64, 20000, 20000
         else:
-            return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/tfrecords/', 64, 20000, 20000
+            return "/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/5_dist/tfrec/{}/".format(stem), 64, 20000, 20000
     elif dist == 14 and speed == 4 and length == 64:
-        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_4/14_dist/tfrecords/', 64, 20000, 20000
+        return '/cifs/data/tserre_lrs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels_skip_param_4/14_dist/tfrecords/', 64, 20000, 20000
 
 
 def get_datasets():

@@ -9,6 +9,8 @@ parser.add_argument('--model', type=str, default="hgru")
 parser.add_argument('--algo', type=str, default="bptt")
 parser.add_argument('--penalty', default=False, action='store_true')
 parser.add_argument('--pretrained', default=False, action='store_true')
+parser.add_argument('--optical_flow', default=False, action='store_true')
+
 parser.add_argument('--ckpt', type=str, default=None)
 parser.add_argument('--dist', type=int)
 parser.add_argument('--speed', type=int)

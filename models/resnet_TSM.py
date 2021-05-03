@@ -235,13 +235,13 @@ class ResNet(nn.Module):
     def __init__(self, block, block2, layers, num_segments, flow_estimation, num_classes=1000, zero_init_residual=False):
         super(ResNet, self).__init__()
         self.inplanes = 64
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.bn2 = nn.BatchNorm2d(128)
         self.relu = nn.ReLU(inplace=True)
         self.sigmoid = nn.Sigmoid()          
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
         self.softmax = nn.Softmax(dim=1)        
         self.num_segments = num_segments     
         self.flow_estimation = flow_estimation
@@ -261,9 +261,9 @@ class ResNet(nn.Module):
             )
        
         self.layer1 = self._make_layer(block, 64, layers[0], num_segments=num_segments)
-        self.layer2 = self._make_layer(block, 128, layers[1],  num_segments=num_segments, stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2],  num_segments=num_segments, stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3],  num_segments=num_segments, stride=2)       
+        self.layer2 = self._make_layer(block, 128, layers[1],  num_segments=num_segments, stride=1)
+        self.layer3 = self._make_layer(block, 256, layers[2],  num_segments=num_segments, stride=1)
+        self.layer4 = self._make_layer(block, 512, layers[3],  num_segments=num_segments, stride=1)       
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 #         self.fc1 = nn.Linear(512 * block.expansion, num_classes)                   
         self.fc1 = nn.Conv1d(512*block.expansion, num_classes, kernel_size=1, stride=1, padding=0,bias=True)         
@@ -414,28 +414,34 @@ class ResNet(nn.Module):
     
         return flow, confidence     
         
-    def forward(self, x, temperature):
-        input =x    
-        
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-       
-        x = self.layer1(x)                             
-        x = self.layer2(x)          
+    def forward(self, x, temperature=100):
+        # input =x    
+        x_shape = x.shape
+        all_xs = []
+        for t in range(x_shape[2]):
+            it_x = x[:, :, t]
+            it_x = self.conv1(it_x)
+            it_x = self.bn1(it_x)
+            it_x = self.relu(it_x)
+            it_x = self.maxpool(it_x)
+            all_xs.append(it_x)
+        import pdb;pdb.set_trace()
+        it_x = tr.stack(all_xs, 2)
+        it_x = self.layer1(it_x)                            
+        it_x = self.layer2(it_x)          
         
         # Flow
         if (self.flow_estimation == 1):  
-            flow_1, match_v = self.flow_computation(x, temperature=temperature)
-            x = self.flow_refinement(flow_1,x, match_v)
+            flow_1, match_v = self.flow_computation(it_x, temperature=temperature)
+            it_x = self.flow_refinement(flow_1, it_x, match_v)
 
-        x = self.layer3(x)                           
-        x = self.layer4(x)
-        x = self.avgpool(x)    
-        x = x.view(x.size(0), -1,1)    
+        it_x = self.layer3(it_x)                           
+        it_x = self.layer4(it_x)
+        it_x = self.avgpool(it_x)    
+        it_x = it_x.view(it_x.size(0), -1,1)    
                        
-        x = self.fc1(x)      
+        it_x = self.fc1(it_x)      
+        all_xs = torch.cat(all_xs, 0)
         return x
 
 

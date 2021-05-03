@@ -1,4 +1,6 @@
 weights/
+*.out
+detectron2*
 MotionSqueeze/
 *.pyc
 *.swp

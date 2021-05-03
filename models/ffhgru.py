@@ -457,7 +457,7 @@ class FFhGRU3D(nn.Module):
 
 class FFhGRU(nn.Module):
 
-    def __init__(self, dimensions, timesteps=8, kernel_size=15, jacobian_penalty=False, grad_method='bptt', no_inh=False, lesion_alpha=False, lesion_mu=False, lesion_gamma=False, lesion_kappa=False):
+    def __init__(self, dimensions, timesteps=8, kernel_size=15, jacobian_penalty=False, grad_method='bptt', no_inh=False, lesion_alpha=False, lesion_mu=False, lesion_gamma=False, lesion_kappa=False, nl=F.softplus):
         '''
         '''
         super(FFhGRU, self).__init__()
@@ -493,7 +493,7 @@ class FFhGRU(nn.Module):
         # self.target_conv_2 = nn.Conv2d(16, 1, 5, padding=0)  # padding=7 // 2)
         self.readout_dense = nn.Linear(1, 1)
         # torch.nn.init.zeros_(self.readout_dense.bias)
-        self.nl = F.softplus
+        self.nl = nl
 
     def forward(self, x, testmode=False):
         # First step: replicate x over the channel dim self.hgru_size times

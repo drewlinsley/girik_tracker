@@ -77,11 +77,12 @@ class PerformerModel(nn.Module):
         self.timesteps = timesteps
         self.jacobian_penalty = jacobian_penalty
         self.grad_method = grad_method
-        self.hgru_size = 64  # dimensions
+        self.hgru_size = 32  # dimensions
         self.bn = nn.BatchNorm3d(self.hgru_size, eps=1e-03, track_running_stats=False)
         self.preproc = nn.Conv3d(3, self.hgru_size, kernel_size=1, padding=1 // 2)
         self.Performer = Performer(
             dim = self.hgru_size,
+            dim_head = self.hgru_size,
             depth = 1,  # 1
             heads = 4,  # 4
             causal = True,
@@ -97,23 +98,28 @@ class PerformerModel(nn.Module):
     def forward(self, x, testmode=False):
         # First step: replicate x over the channel dim self.hgru_size times
         xbn = self.preproc(x)
-        xbn = self.nl(xbn)  # TEST TO SEE IF THE NL STABLIZES
+        # xbn = self.nl(xbn)  # TEST TO SEE IF THE NL STABLIZES
+        xbn_shape = xbn.shape
 
         # Now run Performer
-        # excitation = self.Performer(xbn.permute(0, 2, 3, 4, 1).reshape(xbn.shape[0], -1, xbn.shape[1]))
+        excitation = self.Performer(xbn.permute(0, 2, 3, 4, 1).reshape(xbn.shape[0], -1, xbn.shape[1]))
         # (Pdb) xbn.permute(0, 1, 3, 4, 2).reshape(xbn.shape[0], -1, xbn.shape[2]).shape
         # torch.Size([6, 32768, 64])
         # (Pdb) xbn.view(xbn.shape[0], xbn.shape[1], -)
         # *** SyntaxError: invalid syntax
         # (Pdb) xbn.view(xbn.shape[0], xbn.shape[1], -1).shape
         # torch.Size([6, 32, 65536])
-        xbn_shape = xbn.shape
-        xbn = xbn.permute(0, 1, 3, 4, 2).reshape(xbn_shape[0], -1, xbn_shape[2])  # Drew style less expensive
-        # xbn = xbn.view(xbn.shape[0], xbn.shape[1], -1)  # JK style super expensive
-        # excitation = self.Performer(xbn.permute(0, 2, 3, 4, 1).view(xbn.shape[0], -1, xbn.shape[1]))
-        excitation = self.Performer(xbn)
-        output = excitation.view(xbn_shape[0], xbn_shape[1], xbn_shape[3], xbn_shape[4], xbn_shape[2])  # BTHWC
-        output = output[..., -1]
+        ######
+        # # xbn = xbn.permute(0, 1, 3, 4, 2).reshape(xbn_shape[0], -1, xbn_shape[2])  # Drew style less expensive
+        # xbn = xbn.view(xbn.shape[0], xbn.shape[1], -1).permute(0, 2, 1)  # JK style super expensive  B (HWT) C
+        # # excitation = self.Performer(xbn.permute(0, 2, 3, 4, 1).view(xbn.shape[0], -1, xbn.shape[1]))
+        # excitation = self.Performer(xbn)
+        # output = excitation.view(xbn_shape[0], xbn_shape[2], xbn_shape[3], xbn_shape[4], xbn_shape[1])
+        # output = output[:, -1].permute(0, 3, 1, 2)  # Final timestep  and BHWC -> BCHW
+        ####
+        # output = excitation.view(xbn_shape[0], xbn_shape[1], xbn_shape[3], xbn_shape[4], xbn_shape[2])  # BTHWC
+        output = excitation.view(xbn_shape[0], xbn_shape[2], xbn_shape[3], xbn_shape[4], xbn_shape[1])[:, -1].permute(0, 3, 1, 2)
+        # output = output[..., -1]
         output = torch.cat([output, x[:, 2, 0][:, None]], 1)
 
         # Potentially combine target_conv + readout_bn into 1

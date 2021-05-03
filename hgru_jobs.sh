@@ -1,0 +1,45 @@
+
+
+sbatch run_hgru_1e1_32.sh
+sbatch run_hgru_1e2_32.sh
+sbatch run_hgru_1e3_32.sh
+sbatch run_hgru_1e4_32.sh
+sbatch run_hgru_3e4_32.sh
+sbatch run_hgru_1e5_32.sh
+sbatch run_hgru_1e1_nodale_32.sh
+sbatch run_hgru_1e2_nodale_32.sh
+sbatch run_hgru_1e3_nodale_32.sh
+sbatch run_hgru_1e4_nodale_32.sh
+sbatch run_hgru_1e5_nodale_32.sh
+sbatch run_hgru_3e4_nodale_32.sh
+sbatch run_hgru_1e1_nodale_64.sh
+sbatch run_hgru_1e2_nodale_64.sh
+sbatch run_hgru_1e3_nodale_64.sh
+sbatch run_hgru_1e4_nodale_64.sh
+sbatch run_hgru_1e5_nodale_64.sh
+sbatch run_hgru_3e4_nodale_64.sh
+sbatch run_hgru_1e5_no_inh_32.sh
+sbatch run_hgru_1e4_no_inh_32.sh
+sbatch run_hgru_1e3_no_inh_32.sh
+sbatch run_hgru_1e2_no_inh_32.sh
+sbatch run_hgru_1e1_no_inh_32.sh
+sbatch run_hgru_3e4_no_inh_32.sh
+sbatch run_hgru_1e3_onlyadd_64.sh
+sbatch run_hgru_1e1_onlyadd_64.sh
+sbatch run_hgru_1e2_onlyadd_64.sh
+sbatch run_hgru_1e4_onlyadd_64.sh
+sbatch run_hgru_1e5_onlyadd_64.sh
+sbatch run_hgru_3e4_onlyadd_64.sh
+sbatch run_hgru_1e1_onlyadd_32.sh
+sbatch run_hgru_1e2_onlyadd_32.sh
+sbatch run_hgru_1e3_onlyadd_32.sh
+sbatch run_hgru_1e4_onlyadd_32.sh
+sbatch run_hgru_1e5_onlyadd_32.sh
+sbatch run_hgru_3e4_onlyadd_32.sh
+sbatch run_hgru_3e4_mult_add_32.sh
+sbatch run_hgru_1e5_mult_add_32.sh
+sbatch run_hgru_1e4_mult_add_32.sh
+sbatch run_hgru_1e3_mult_add_32.sh
+sbatch run_hgru_1e2_mult_add_32.sh
+sbatch run_hgru_1e1_mult_add_32.sh
+

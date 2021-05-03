@@ -110,16 +110,19 @@ if __name__ == '__main__':
     assert args.speed is not None, "You must pass a PT speed."
     assert args.length is not None, "You must pass a PT length."
     stem = "{}_{}_{}".format(args.length, args.speed, args.dist)
-    pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=args.dist, speed=args.speed, length=args.length)  # 14, 1, 64
+    pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=args.dist, speed=args.speed, length=args.length, optical_flow=args.optical_flow)  # 14, 1, 64
 
     print("Loading training dataset")
-    train_loader = tfr_data_loader(data_dir=pf_root+'train-*', batch_size=args.batch_size, drop_remainder=True)
+    train_loader = tfr_data_loader(data_dir=pf_root+'train-*', batch_size=args.batch_size, drop_remainder=True, timesteps=args.length)  # , optical_flow=args.optical_flow)
 
     print("Loading validation dataset")
-    val_loader = tfr_data_loader(data_dir=pf_root+'test-*', batch_size=args.batch_size, drop_remainder=True)
+    val_loader = tfr_data_loader(data_dir=pf_root+'test-*', batch_size=args.batch_size, drop_remainder=True, timesteps=args.length)  # , optical_flow=args.optical_flow)
 
-    results_folder = os.path.join('results', stem, '{0}'.format(args.name))
-    ES = EarlyStopping(patience=50, results_folder=results_folder)
+    if args.optical_flow:
+        stem = "_{}".format(stem, "flow")
+    # results_folder = os.path.join('results', stem, '{0}'.format(args.name))
+    results_folder = os.path.join("/cifs/data/tserre_lrs/projects/prj_tracking/pytorch_hGRU/cifs_results", stem, '{0}'.format(args.name))
+    ES = EarlyStopping(patience=200, results_folder=results_folder)
     os.makedirs(results_folder, exist_ok=True)
     exp_logging = args.log
     jacobian_penalty = args.penalty
