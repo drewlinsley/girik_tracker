@@ -172,7 +172,7 @@ class hConvGRUCell(nn.Module):
     Generate a convolutional GRU cell
     """
 
-    def __init__(self, hidden_size, kernel_size, timesteps, batchnorm=True, grad_method='bptt', use_attention=False, no_inh=False, lesion_alpha=False, lesion_gamma=False, lesion_mu=False, lesion_kappa=False):
+    def __init__(self, hidden_size, kernel_size, timesteps, batchnorm=True, grad_method='bptt', use_attention=False, no_inh=False, lesion_alpha=False, lesion_gamma=False, lesion_mu=False, lesion_kappa=False, att_nl=torch.sigmoid):
         super(hConvGRUCell, self).__init__()
         self.padding = kernel_size // 2
         self.hidden_size = hidden_size
@@ -180,6 +180,7 @@ class hConvGRUCell(nn.Module):
         self.timesteps = timesteps
         self.use_attention = use_attention
         self.no_inh = no_inh
+        self.att_nl = att_nl
         
         if self.use_attention:
             self.a_w_gate = nn.Conv2d(hidden_size, hidden_size, 1, padding=1 // 2)
@@ -260,7 +261,7 @@ class hConvGRUCell(nn.Module):
         # att_gate = torch.sigmoid(self.a_w_gate(input_) * self.a_u_gate(excitation))  # Attention Spotlight
         if self.use_attention:
             # att_gate = torch.sigmoid(self.a_w_gate(inhibition) + self.a_u_gate(excitation))  # Attention Spotlight -- MOST RECENT WORKING
-            att_gate = torch.sigmoid(self.a_w_gate(input_) + self.a_u_gate(excitation))  # Attention Spotlight -- MOST RECENT WORKING
+            att_gate = self.att_nl(self.a_w_gate(input_) + self.a_u_gate(excitation))  # Attention Spotlight -- MOST RECENT WORKING
         elif not self.use_attention and testmode:
             att_gate = torch.zeros_like(input_)
 
@@ -269,8 +270,11 @@ class hConvGRUCell(nn.Module):
             gated_input = input_  # * att_gate  # In activ range
             gated_excitation = att_gate * excitation
             gated_inhibition = att_gate  # * inhibition
+            # gated_inhibition = inhibition
         else:
             gated_input = input_
+            gated_excitation = excitation
+            gated_inhibition = inhibition
 
         if not self.no_inh:
             # Compute inhibition
@@ -459,7 +463,7 @@ class FFhGRU3D(nn.Module):
 
 class FFhGRU(nn.Module):
 
-    def __init__(self, dimensions, timesteps=8, kernel_size=15, jacobian_penalty=False, grad_method='bptt', no_inh=False, lesion_alpha=False, lesion_mu=False, lesion_gamma=False, lesion_kappa=False):
+    def __init__(self, dimensions, timesteps=8, kernel_size=15, jacobian_penalty=False, grad_method='bptt', no_inh=False, lesion_alpha=False, lesion_mu=False, lesion_gamma=False, lesion_kappa=False, nl=F.softplus):
         '''
         '''
         super(FFhGRU, self).__init__()
@@ -495,7 +499,7 @@ class FFhGRU(nn.Module):
         # self.target_conv_2 = nn.Conv2d(16, 1, 5, padding=0)  # padding=7 // 2)
         self.readout_dense = nn.Linear(1, 1)
         # torch.nn.init.zeros_(self.readout_dense.bias)
-        self.nl = F.softplus
+        self.nl = nl
 
     def forward(self, x, testmode=False):
         # First step: replicate x over the channel dim self.hgru_size times
@@ -567,7 +571,7 @@ class FFhGRU(nn.Module):
 
 class FFhGRULesion(nn.Module):
 
-    def __init__(self, dimensions, timesteps=8, kernel_size=15, jacobian_penalty=False, grad_method='bptt', no_inh=False, lesion_alpha=False, lesion_mu=False, lesion_gamma=False, lesion_kappa=False, use_attention=True):
+    def __init__(self, dimensions, timesteps=8, kernel_size=15, jacobian_penalty=False, grad_method='bptt', no_inh=False, lesion_alpha=False, lesion_mu=False, lesion_gamma=False, lesion_kappa=False, use_attention=True, nl=F.softplus, att_nl=torch.sigmoid):
         '''
         '''
         super(FFhGRULesion, self).__init__()
@@ -589,6 +593,7 @@ class FFhGRULesion(nn.Module):
             lesion_mu=lesion_mu,
             lesion_gamma=lesion_gamma,
             lesion_kappa=lesion_kappa,
+            att_nl=att_nl,
             timesteps=timesteps)
         # self.bn = nn.BatchNorm2d(self.hgru_size, eps=1e-03, track_running_stats=False)
         # self.readout = nn.Linear(timesteps * self.hgru_size, 1) # the first 2 is for batch size, the second digit is for the dimension
@@ -603,7 +608,7 @@ class FFhGRULesion(nn.Module):
         # self.target_conv_2 = nn.Conv2d(16, 1, 5, padding=0)  # padding=7 // 2)
         self.readout_dense = nn.Linear(1, 1)
         # torch.nn.init.zeros_(self.readout_dense.bias)
-        self.nl = F.softplus
+        self.nl = nl
 
     def forward(self, x, testmode=False):
         # First step: replicate x over the channel dim self.hgru_size times

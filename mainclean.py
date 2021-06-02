@@ -67,6 +67,8 @@ def validate(val_loader, model, criterion, device, logiters=None):
 
             # debug_plot(imgs)
             output, jv_penalty = engine.model_step(model, imgs, model_name=args.model)
+            if isinstance(output, tuple):
+                output = output[0]
             loss = criterion(output, target.float().reshape(-1, 1))
             prec1, preci, rec, f1s = acc_scores(target, output.data)
             
@@ -113,13 +115,13 @@ if __name__ == '__main__':
     pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=args.dist, speed=args.speed, length=args.length)  # 14, 1, 64
 
     print("Loading training dataset")
-    train_loader = tfr_data_loader(data_dir=pf_root+'train-*', batch_size=args.batch_size, drop_remainder=True)
+    train_loader = tfr_data_loader(data_dir=pf_root+'train-*', batch_size=args.batch_size, timesteps=args.length, drop_remainder=True)
 
     print("Loading validation dataset")
-    val_loader = tfr_data_loader(data_dir=pf_root+'test-*', batch_size=args.batch_size, drop_remainder=True)
+    val_loader = tfr_data_loader(data_dir=pf_root+'test-*', batch_size=args.batch_size, timesteps=args.length, drop_remainder=True)
 
     results_folder = os.path.join('results', stem, '{0}'.format(args.name))
-    ES = EarlyStopping(patience=100, results_folder=results_folder)
+    ES = EarlyStopping(patience=50, results_folder=results_folder)  # 200
     os.makedirs(results_folder, exist_ok=True)
     exp_logging = args.log
     jacobian_penalty = args.penalty
@@ -184,6 +186,8 @@ if __name__ == '__main__':
 
             # Run training
             output, jv_penalty = engine.model_step(model, imgs, model_name=args.model)
+            if isinstance(output, tuple):
+                output = output[0]
             loss = criterion(output, target.float().reshape(-1, 1))
             losses.update(loss.data.item(), 1)
             jv_penalty = jv_penalty.mean()

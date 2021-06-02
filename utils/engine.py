@@ -17,6 +17,7 @@ from models import nostridetv_positions as nostride_video_pos
 from models.slowfast_utils import slowfast, slowfast_nl
 from models import transformers
 from models import kys
+from models import timesformer
 try:
     from models import resnet_TSM as rntsm
 except:
@@ -27,18 +28,31 @@ except:
     print("Failed to import tqdm.")
 
 
-TORCHVISION = ['r3d', 'mc3', 'r2plus1', 'nostride_r3d', 'nostride_r3d_pos']
+TORCHVISION = ['r3d', 'm3d', 'mc3', 'r2plus1', 'nostride_r3d', 'nostride_r3d_pos', 'nostride_video_cc_small', 'timesformer_facebook', 'performer', 'timesformer_facebook_in', 'in_timesformer_facebook',  'space_in_timesformer_facebook', 'timesformer_facebook_in_space',]
 SLOWFAST = ['slowfast', 'slowfast_nl']
 ALL_DATASETS = [ 
-    {"dist": 14, "speed": 1, "length": 64},
-    {"dist": 14, "speed": 1, "length": 128},
+    {"dist": 0, "speed": 1, "length": 32},
     {"dist": 14, "speed": 1, "length": 32},
-    {"dist": 14, "speed": 2, "length": 64},
-    {"dist": 14, "speed": 4, "length": 64},
+    {"dist": 25, "speed": 1, "length": 32},
     {"dist": 0, "speed": 1, "length": 64},
     {"dist": 5, "speed": 1, "length": 64},
+    {"dist": 14, "speed": 1, "length": 64},
+    {"dist": 25, "speed": 1, "length": 64},
+    {"dist": 14, "speed": 1, "length": 128},
+    # {"dist": 14, "speed": 2, "length": 64},
+    # {"dist": 14, "speed": 4, "length": 64},
+]
+DATASETS_GEN_64 = [
+    {"dist": 0, "speed": 1, "length": 64},
+    {"dist": 14, "speed": 1, "length": 64},
     {"dist": 25, "speed": 1, "length": 64},
 ]
+DATASETS_GEN_32 = [
+    {"dist": 0, "speed": 1, "length": 32},
+    {"dist": 14, "speed": 1, "length": 32},
+    {"dist": 25, "speed": 1, "length": 32},
+]
+
 
 def model_step(model, imgs, model_name, test=False):
     """Pass imgs through the model."""
@@ -97,6 +111,16 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             jacobian_penalty=False,
             use_attention=False,
             grad_method='bptt')
+    elif args.model == 'ffhgru_soft' or args.model == 'hgru_soft':
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRULesion(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            use_attention=True,
+            grad_method='bptt',
+            att_nl=nn.Softmax2d())
     elif args.model == 'ffhgru_no_inh':
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRULesion(
@@ -106,7 +130,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             jacobian_penalty=False,
             no_inh=True,
             grad_method='bptt')
-    elif args.model == 'ffhgru_no_mult':
+    elif args.model == 'ffhgru_no_mult':  #Kill all multiplicative
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRULesion(
             dimensions=dimensions,
@@ -116,7 +140,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             lesion_alpha=True,
             lesion_gamma=True,
             grad_method='bptt')
-    elif args.model == 'ffhgru_no_add':
+    elif args.model == 'ffhgru_no_add':  # Kill all additive components
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRULesion(
             dimensions=dimensions,
@@ -126,7 +150,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             lesion_mu=True,
             lesion_kappa=True,
             grad_method='bptt')
-    elif args.model == 'ffhgru_mult_add':
+    elif args.model == 'ffhgru_mult_add':  # Mely without subtractive inh
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
         model = ffhgru.FFhGRULesion(
             dimensions=dimensions,
@@ -138,12 +162,45 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             lesion_mu=True,
             lesion_kappa=False,
             grad_method='bptt')
+    elif args.model == 'ffhgru_only_div_add':
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRULesion(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            lesion_alpha=True,
+            lesion_gamma=False,
+            lesion_mu=False,
+            lesion_kappa=True,
+            grad_method='bptt')
+    elif args.model == 'ffhgru_only_add':  # Reverse mely
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRU(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            lesion_alpha=True,  # No div inh
+            lesion_gamma=False,  # No add exc
+            lesion_mu=False,
+            lesion_kappa=True,
+            grad_method='bptt')
     elif args.model == 'gru':
         model = kys.GRU(
             dimensions=dimensions * 2,
             timesteps=timesteps,
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
+            grad_method='bptt')
+    elif args.model == 'ffhgru_tanh':  # No dales
+        print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
+        model = ffhgru.FFhGRU(
+            dimensions=dimensions,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            nl=F.tanh,
             grad_method='bptt')
     elif args.model == 'ffhgru_v2':
         print("Init model ffhgru ", args.algo, 'penalty: ', args.penalty)
@@ -186,6 +243,13 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
             grad_method='bptt')
+    elif args.model == 'performer_64':
+        model = transformers.PerformerModel(
+            dimensions=64,
+            timesteps=timesteps,
+            kernel_size=fb_kernel_size,
+            jacobian_penalty=False,
+            grad_method='bptt')
     elif args.model == 'lambda':
         model = transformers.LambdaModel(
             dimensions=dimensions,
@@ -200,6 +264,27 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
             kernel_size=fb_kernel_size,
             jacobian_penalty=False,
             grad_method='bptt')
+    elif args.model == 'timesformer_facebook':
+        model = timesformer.TimeSformer(
+            img_size=32,
+            patch_size=8,  # Used to be 16
+            num_classes=1,
+            num_frames=timesteps,
+            attention_type='joint_space_time')
+    elif args.model == 'timesformer_facebook_in' or args.model == 'in_timesformer_facebook':
+        model = timesformer.TimeSformerIN(
+            img_size=32,
+            patch_size=16,  # Used to be 16
+            num_classes=1,
+            num_frames=timesteps,
+            attention_type='joint_space_time')
+    elif args.model == 'timesformer_facebook_in_space' or args.model == 'space_in_timesformer_facebook':
+        model = timesformer.TimeSformerIN(
+            img_size=32,
+            patch_size=16,  # Used to be 16
+            num_classes=1,
+            num_frames=timesteps,
+            attention_type='divided_space_time')
     elif args.model == 'slowfast':
         model = slowfast()
     elif args.model == 'slowfast_nl':
@@ -224,7 +309,7 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
     elif args.model == 'nostride_video_cc_small':
         model = nostride_video_cc_small.r3d_18(pretrained=args.pretrained, timesteps=timesteps)
         num_ftrs = model.fc.in_features
-    elif args.model == 'mc3':
+    elif args.model == 'mc3' or args.model == 'm3d':
         model = video.mc3_18(pretrained=args.pretrained)
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, 1)
@@ -233,8 +318,19 @@ def model_selector(args, timesteps, device, fb_kernel_size=7, dimensions=32):
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, 1)
     else:
-        raise NotImplementedError("Model not found.")
+        raise NotImplementedError("Model {} not found.".format(args.model))
     return model
+
+
+def fix_model_name(model):
+    if "r3d_nostride" in model:
+        return "nostride_video_cc_small"
+    elif model == "r2_plus" or model == "r2plus" or model == "r2_plus1":
+        return "r2plus1"
+    elif model == "hgru_TEST":
+        return "ffhgru"
+    else:
+        return model
 
 
 def prepare_data(imgs, target, args, device, disentangle_channels, use_augmentations=False):
@@ -275,21 +371,23 @@ def prepare_data(imgs, target, args, device, disentangle_channels, use_augmentat
     return imgs, target
 
 
-def load_ckpt(model, model_path):
+def load_ckpt(model, model_path, strict=True):
     checkpoint = torch.load(model_path)
     # Check if "module" is the first part of the key
     # check = checkpoint['state_dict'].keys()[0]
-    sd = checkpoint['state_dict']
+    if "state_dict" in checkpoint:
+        model.load_state_dict(checkpoint['state_dict'], strict)
+    else:
+        model.load_state_dict(checkpoint, strict)
     # if "module" in check and not args.parallel:
     #     new_sd = {}
     #     for k, v in sd.items():
     #         new_sd[k.replace("module.", "")] = v
     #     sd = new_sd
-    model.load_state_dict(sd)
     return model
 
 
-def plot_results(states, imgs, target, output, timesteps, gates=None, prep_gifs=False, results_folder=None, show_fig=False):
+def plot_results(states, imgs, target, output, timesteps, gates=None, prep_gifs=False, results_folder=None, show_fig=False, grads_passed=False):
     states = states.detach().cpu().numpy()
     gates = gates.detach().cpu().numpy()
     cols = (timesteps / 8) + 1
@@ -301,6 +399,9 @@ def plot_results(states, imgs, target, output, timesteps, gates=None, prep_gifs=
     sel = sel.cpu().numpy()
     sel = np.where(sel)[0]
     sel = sel[0]
+    att_title = "Attention"
+    if grads_passed:
+        att_title = 'd|human-model|/dImg'
     fig = plt.figure()
     for idx, i in enumerate(rng):
         plt.subplot(3, cols, idx + 1)
@@ -310,7 +411,7 @@ def plot_results(states, imgs, target, output, timesteps, gates=None, prep_gifs=
         plt.subplot(3, cols, idx + 1 + cols)
         plt.axis("off")
         plt.imshow((gates[sel, i].squeeze() ** 2).mean(0))
-        plt.title("Attention")
+        plt.title(att_title)
         plt.subplot(3, cols, idx + 1 + cols + (cols - 1))
         plt.title("Recurrent activity")
         plt.axis("off")
@@ -362,6 +463,22 @@ def plot_results(states, imgs, target, output, timesteps, gates=None, prep_gifs=
                     os.remove(filename)
 
 
+def of_dataset_selector(dist, speed, length):
+    if dist == 14 and speed == 1 and length == 64:
+        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/14_dist/tfrecords_optic_flow/', 64, 20000, 20000
+    elif dist == 25 and speed == 1 and length == 64:
+        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/25_dist/tfrecords_optic_flow/', 64, 20000, 20000
+    elif dist == 0 and speed == 1 and length == 64:
+        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/0_dist/tfrecords_optic_flow/', 64, 20000, 20000
+
+    elif dist == 0 and speed == 1 and length == 32:
+        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/0_dist/tfrecords_optic_flow/', 32, 20000, 20000
+    elif dist == 14 and speed == 1 and length == 32:
+        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/14_dist/tfrecords_optic_flow/', 32, 20000, 20000
+    elif dist == 25 and speed == 1 and length == 32:
+        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/25_dist/tfrecords_optic_flow/', 32, 20000, 20000
+
+
 def dataset_selector(dist, speed, length):
     """Organize the datasets here."""
     if dist == 14 and speed == 1 and length == 64:
@@ -371,11 +488,17 @@ def dataset_selector(dist, speed, length):
 
     elif dist == 14 and speed == 1 and length == 32:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/14_dist/tfrecords/', 32, 20000, 20000
+    elif dist == 25 and speed == 1 and length == 32:
+        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/25_dist/tfrecords/', 32, 20000, 20000
     elif dist == 5 and speed == 1 and length == 32:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/5_dist/tfrecords/', 32, 20000, 20000
     elif dist == 0 and speed == 1 and length == 32:
-        return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/0_dist/tfrecords/', 32, 20000, 20000
-
+        lp = "/media/data/tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/0_dist/tfrecords/"
+        if os.path.exists(lp):
+            print("Loading data from local storage.")
+            return lp, 32, 20000, 20000
+        else:
+            return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_32_32_32_separate_channels/0_dist/tfrecords/', 32, 20000, 20000
     elif dist == 25 and speed == 1 and length == 64:
         return '/media/data_cifs/projects/prj_tracking/downsampled_constrained_red_blue_datasets_64_32_32_separate_channels/25_dist/tfrecords/', 64, 20000, 20000
     elif dist == 14 and speed == 2 and length == 64:
@@ -400,13 +523,40 @@ def dataset_selector(dist, speed, length):
 
 def tuning_dataset_selector():
     """Right now, just return the path to Girik's circular dataset."""
-    return '/media/data_cifs/projects/prj_tracking/downsampled_circular/downsampled_circular_32_34_34/1_dist_separate_channel/tfrecords', 64, 18, 18  # path/length/size/size
+    return '/media/data_cifs/projects/prj_tracking/downsampled_circular/downsampled_circular_64_32_32_separate_channel/1_dist/tfrecords', 64, 18, 18  # path/length/size/size
+    # return '/media/data_cifs/projects/prj_tracking/downsampled_circular/downsampled_circular_64_64_64_separate_channel/1_dist/tfrecords', 64, 18, 18  # path/length/size/size
 
 
-def human_dataset_selector():
+def human_dataset_selector(set_name):
     """Right now, just return the path to Girik's circular dataset."""
-    return '/media/data_cifs/projects/prj_tracking/MTurk_videos/downsampled_constrained_red_blue_64_32_32/14_dist_again_for_human_correlation/tfrecords', 64, 72, 72
+    if set_name == "gen_1_25_64":
+        return '/media/data_cifs/projects/prj_tracking/MTurk_videos_from_VM/downsampled_constrained_red_blue_64_32_32/25_dist_again_for_human_correlation/tfrecords', 64, 40, 40
+    elif set_name == "gen_1_14_128":
+        return '/media/data_cifs/projects/prj_tracking/MTurk_videos_from_VM/downsampled_constrained_red_blue_128_32_32/14_dist_again_for_human_correlation/tfrecords', 128, 40, 40
+    else:
+        return '/media/data_cifs/projects/prj_tracking/MTurk_videos/downsampled_constrained_red_blue_64_32_32/14_dist_again_for_human_correlation/tfrecords', 64, 72, 72
+
+
+def visualization_dataset():
+    return '/media/data_cifs/projects/prj_tracking/tunnel_vis/sample_2/tfrecords', 64, 100, 100
+
 
 def get_datasets():
     return ALL_DATASETS
+
+
+def get_64_gen():
+    return DATASETS_GEN_64
+
+
+def get_32_gen():
+    return DATASETS_GEN_32
+
+
+def get_of64_gen():
+    return DATASETS_GEN_64
+
+
+def get_of32_gen():
+    return DATASETS_GEN_32
 

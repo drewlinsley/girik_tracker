@@ -13,6 +13,11 @@ parser.add_argument('--ckpt', type=str, default=None)
 parser.add_argument('--dist', type=int)
 parser.add_argument('--speed', type=int)
 parser.add_argument('--length', type=int)
+parser.add_argument('--gifs', type=int, help='Number of gifs to produce.')
+parser.add_argument('--not_strict', default=True, action='store_false', help='strict ckpt restore or not')
+parser.add_argument('--set_name', type=str, default=None)
+parser.add_argument('--which_tests', type=str, default="all")
+parser.add_argument('--save_rnn', default=False, action='store_true')
 
 # ========================= Learning Configs ==========================
 parser.add_argument('--epochs', default=30, type=int, metavar='N',

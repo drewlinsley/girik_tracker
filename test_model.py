@@ -6,6 +6,7 @@ Created on Wed Aug 21 14:04:57 2019
 """
 
 import os
+import re
 import time
 import torch
 from torchvision.transforms import Compose as transcompose
@@ -49,40 +50,102 @@ debug_data = False
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def eval_best_model(directory, model, prep_gifs=3, batch_size=100):
+def eval_best_model(directory, model, strict=True, prep_gifs=3, batch_size=100, save_rnn=False, which_tests="all"):
     """Given a directory, find the best performing checkpoint and evaluate it on all datasets."""
     # perfs = np.load(os.path.join(directory, "val.npz"))["loss"]
     # arg_perf = np.argmin(perfs)
-    perfs = np.load(os.path.join(directory, "val.npz"))["balacc"]
+    if os.path.exists(os.path.join(directory, "val.npz")):
+        perfs = np.load(os.path.join(directory, "val.npz"))["balacc"]
+        # perfs = np.load(os.path.join(directory, "val.npz"))["hp_dict"]
+    elif os.path.exists(os.path.join(os.path.sep.join(directory.split(os.path.sep)[:-1]), "{}val.npz".format(directory.split(os.path.sep)[-1]))):
+        perfs = np.load(os.path.join(os.path.sep.join(directory.split(os.path.sep)[:-1]), "{}val.npz".format(directory.split(os.path.sep)[-1])))["balacc"]
+    elif os.path.exists(os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results", "_{}".format(directory.split(os.path.sep)[1]), "{}val.npz".format(directory.split(os.path.sep)[-1]))):
+        perfs = np.load(os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results", "_{}".format(directory.split(os.path.sep)[1]), "{}val.npz".format(directory.split(os.path.sep)[-1])))["balacc"]
+        directory = os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results", "_{}".format(directory.split(os.path.sep)[1]), "{}".format(directory.split(os.path.sep)[-1]))
+    elif os.path.exists(os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results_new", "_{}".format(directory.split(os.path.sep)[1]), "{}val.npz".format(directory.split(os.path.sep)[-1]))):
+        perfs = np.load(os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results_new", "_{}".format(directory.split(os.path.sep)[1]), "{}val.npz".format(directory.split(os.path.sep)[-1])))["balacc"]
+        directory = os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results_new", "_{}".format(directory.split(os.path.sep)[1]), "{}".format(directory.split(os.path.sep)[-1]))
+    elif os.path.exists(os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results_new", directory.split(os.path.sep)[1], "{}val.npz".format(directory.split(os.path.sep)[-1]))):
+        perfs = np.load(os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results_new", directory.split(os.path.sep)[1], "{}val.npz".format(directory.split(os.path.sep)[-1])))["balacc"]
+        directory = os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results_new", directory.split(os.path.sep)[1], "{}".format(directory.split(os.path.sep)[-1]))
+    else:
+        print("Falling back to data cifs")
+        perfs = np.load(os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results", directory.split(os.path.sep)[1], "{}val.npz".format(directory.split(os.path.sep)[-1])))["balacc"]
+        directory = os.path.join("/media/data_cifs/projects/prj_tracking/pytorch_hGRU/cifs_results", directory.split(os.path.sep)[1], "{}".format(directory.split(os.path.sep)[-1]))
     arg_perf = np.argmax(perfs)
     weights = glob(os.path.join(directory, "saved_models", "*.tar"))
-    weights.sort(key=os.path.getmtime)
+    if not len(weights):
+        weights = glob(os.path.join(directory, "*.tar"))
+        perfs = np.asarray([int(re.search("acc_00\d\d", w).group().split("_")[1]) for w in weights])
+        arg_perf = np.argsort(perfs)[-1]
+        # hps = np.load(os.path.join(directory, "hp_dict.npz"))
+    else:
+        # hps = np.load(os.path.join(directory, "saved_models", "hp_dict.npz"))
+        pass
+    if not len(weights):
+        import pdb;pdb.set_trace()
+        weights.sort(key=os.path.getmtime)
     weights = np.asarray(weights)
     ckpt = weights[arg_perf]
 
+    # Fix model name if needed
+    model = engine.fix_model_name(model)
+    print("Evaluating {}".format(model))
+
     # Construct new args
     args = SimpleNamespace()
-    args.batch_size = batch_size
-    args.parallel = True
+    if "performer" in model.lower():
+        # args.parallel = False
+        args.batch_size = 8
+    else:
+        # args.parallel = True
+        args.batch_size = batch_size
+    if "hgru_" in model.lower():
+        args.strict = False
+    else:
+        args.strict = strict
+    check_weight = torch.load(ckpt)
+    if 'state_dict' in check_weight:
+        par_check = [x for x in torch.load(ckpt)['state_dict'].keys()][0]
+    else:
+        par_check = [x for x in torch.load(ckpt).keys()][0]
+    if "module" in par_check:
+        args.parallel = True
+    else:
+        args.parallel = False
     args.ckpt = ckpt
-    args.model = model
+    args.model = model  # hps["model"]
     args.penalty = "Testing"
     args.algo = "Testing"
+    args.save_rnn = save_rnn
     if "imagenet" in directory:
         args.pretrained = True
     else:
         args.pretrained = False
-    ds = engine.get_datasets()
+    if which_tests == "64":
+        ds = engine.get_64_gen()
+    elif which_tests == "32":
+        ds = engine.get_32_gen()
+    elif which_tests == "of64":
+        ds = engine.get_of64_gen()
+    elif which_tests == "of32":
+        ds = engine.get_of32_gen()
+    else:
+        ds = engine.get_datasets()
+
     for d in ds:
-        evaluate_model(results_folder, args, prep_gifs=prep_gifs, dist=d["dist"], speed=d["speed"], length=d["length"])
+        evaluate_model(results_folder, args, prep_gifs=prep_gifs, dist=d["dist"], speed=d["speed"], length=d["length"], which_tests=which_tests)
 
 
-def evaluate_model(results_folder, args, prep_gifs=3, dist=14, speed=1, length=64):
+def evaluate_model(results_folder, args, prep_gifs=0, dist=14, speed=1, length=64, which_tests="all"):
     """Evaluate a model and plot results."""
     os.makedirs(results_folder, exist_ok=True)
     model = engine.model_selector(args=args, timesteps=length, device=device)
 
-    pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=dist, speed=speed, length=length)
+    if "of" in which_tests:
+        pf_root, timesteps, len_train_loader, len_val_loader = engine.of_dataset_selector(dist=dist, speed=speed, length=length)
+    else: 
+        pf_root, timesteps, len_train_loader, len_val_loader = engine.dataset_selector(dist=dist, speed=speed, length=length)
     print("Loading training dataset")
     train_loader = tfr_data_loader(data_dir=os.path.join(pf_root,'train-*'), batch_size=args.batch_size, drop_remainder=True, timesteps=timesteps)
 
@@ -104,7 +167,7 @@ def evaluate_model(results_folder, args, prep_gifs=3, dist=14, speed=1, length=6
     print("Including parameters {}".format([k for k, v in model.named_parameters()]))
 
     assert args.ckpt is not None, "You must pass a checkpoint for testing."
-    model = engine.load_ckpt(model, args.ckpt)
+    model = engine.load_ckpt(model, args.ckpt, strict=args.strict)
 
     model.eval()
     accs = []
@@ -125,32 +188,50 @@ def evaluate_model(results_folder, args, prep_gifs=3, dist=14, speed=1, length=6
             with torch.no_grad():
                 imgs, target = engine.prepare_data(imgs=imgs, target=target, args=args, device=device, disentangle_channels=disentangle_channels)
                 output, states, gates = engine.model_step(model, imgs, model_name=args.model, test=True)
+                if isinstance(output, tuple):
+                    output = output[0]
                 loss = criterion(output, target.float().reshape(-1, 1))
                 accs.append((target.reshape(-1).float() == (output.reshape(-1) > 0).float()).float().mean().cpu())
                 losses.append(loss.item())
                 if plot_incremental and "hgru" in args.model:
                     engine.plot_results(states, imgs, target, output=output, timesteps=timesteps, gates=gates)
 
-    print("Mean accuracy: {}, mean loss: {}".format(np.mean(accs), np.mean(losses)))
-    np.savez(os.path.join(results_folder, "test_perf_dist_{}_speed_{}_length_{}".format(dist, speed, length)), np.mean(accs), np.mean(losses))
+    print("Dataset: Dist {} Speed {} Len {}, Mean accuracy: {}, mean loss: {}".format(dist, speed, length, np.mean(accs), np.mean(losses)))
+    np.savez(os.path.join(results_folder, "test_perf_dist_{}_speed_{}_length_{}".format(dist, speed, length)), acc=np.mean(accs), loss=np.mean(losses), scores=output.reshape(-1).cpu())
+    np.savez(os.path.join(results_folder, "exps_{}_dist_{}_speed_{}_length_{}".format(which_tests, dist, speed, length)), np.mean(accs), np.mean(losses))
 
     # Prep_gifs needs to be an integer
-    if "hgru" in args.model:
+    if "hgru" in args.model and prep_gifs:
         data_results_folder = os.path.join(results_folder, "test_dist_{}_speed_{}_length_{}".format(dist, speed, length))
         os.makedirs(data_results_folder, exist_ok=True)
         engine.plot_results(states, imgs, target, output=output, timesteps=timesteps, gates=gates, prep_gifs=prep_gifs, results_folder=data_results_folder)
+
+    if args.save_rnn:
+        data_results_folder = os.path.join(results_folder, "recurrent_states_{}_speed_{}_length_{}".format(dist, speed, length))
+        os.makedirs(data_results_folder, exist_ok=True)
+        np.save(os.path.join(data_results_folder, "gates"), gates)
+        np.save(os.path.join(data_results_folder, "states"), states)
+        np.save(os.path.join(data_results_folder, "imgs"), imgs)
 
 
 if __name__ == '__main__':
     length = args.length
     speed = args.speed
     dist = args.dist
+    prep_gifs = 5  # args.gifs
+    save_rnn = args.save_rnn
+    which_tests = args.which_tests
     # perfs = np.load(os.path.join(directory, "val.npz"))["loss"]
     # arg_perf = np.argmin(perfs)
-    res_dir = "{}_{}_{}".format(length, speed, dist)
-    results_folder = os.path.join('results', res_dir, args.name)
-    if args.ckpt is None:
-        eval_best_model(directory=results_folder, model=args.model)
+    if "of" in which_tests:
+        res_dir = "_{}_{}_{}".format(length, speed, dist)
+        print("RUNNING OF MODEL")
     else:
-        evaluate_model(results_folder=results_folder, args=args)
+        res_dir = "{}_{}_{}".format(length, speed, dist)
+    results_folder = os.path.join('results', res_dir, args.name)
+    print("SAVING RESULTS TO {}".format(results_folder))
+    if args.ckpt is None:
+        eval_best_model(directory=results_folder, model=args.model, prep_gifs=prep_gifs, strict=args.not_strict, save_rnn=save_rnn, which_tests=which_tests)
+    else:
+        evaluate_model(results_folder=results_folder, args=args, prep_gifs=prep_gifs, save_rnn=save_rnn, which_tests=which_tests)
 

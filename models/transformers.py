@@ -77,11 +77,13 @@ class PerformerModel(nn.Module):
         self.timesteps = timesteps
         self.jacobian_penalty = jacobian_penalty
         self.grad_method = grad_method
-        self.hgru_size = 64  # dimensions
+        self.hgru_size = dimensions  # 32  # 64  # dimensions
         self.bn = nn.BatchNorm3d(self.hgru_size, eps=1e-03, track_running_stats=False)
         self.preproc = nn.Conv3d(3, self.hgru_size, kernel_size=1, padding=1 // 2)
         self.Performer = Performer(
             dim = self.hgru_size,
+            # dim_head = 8,  # self.hgru_size,
+            dim_head = self.hgru_size,
             depth = 1,  # 1
             heads = 4,  # 4
             causal = True,
